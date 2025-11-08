@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- StoryHug Splash Screen with Circular Logo -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Gradient background: Pink to Blue (matching StoryHug brand) -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:startColor="#5BA5C1"
+                android:centerColor="#4A8FA8"
+                android:endColor="#2C5F7A"
+                android:angle="180" />
+        </shape>
+    </item>
+
+    <!-- Circular logo with frosted glass effect -->
+    <item
+        android:width="160dp"
+        android:height="160dp"
+        android:gravity="center">
+        <shape android:shape="oval">
+            <!-- Frosted white circle background -->
+            <solid android:color="#4DFFFFFF"/> <!-- 30% opacity white -->
+            <!-- Subtle border -->
+            <stroke
+                android:width="2dp"
+                android:color="#33FFFFFF"/> <!-- 20% opacity white border -->
+        </shape>
+    </item>
+
+    <!-- StoryHug logo inside the circle -->
+    <item
+        android:width="120dp"
+        android:height="120dp"
+        android:gravity="center"
+        android:drawable="@drawable/splash_logo" />
+</layer-list>
