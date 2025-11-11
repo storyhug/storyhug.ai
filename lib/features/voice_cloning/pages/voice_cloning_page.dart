@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../shared/models/user_voice.dart';
 import '../../../shared/widgets/storyhug_background.dart';
+import '../../player/services/audio_player_service.dart';
 
 class VoiceCloningPage extends StatefulWidget {
   const VoiceCloningPage({super.key});
@@ -19,14 +20,17 @@ class VoiceCloningPage extends StatefulWidget {
 class _VoiceCloningPageState extends State<VoiceCloningPage> {
   final VoiceRecordingService _recordingService = VoiceRecordingService();
   final VoiceCloningService _voiceCloningService = VoiceCloningService();
-  
+  final AudioPlayerService _audioPlayerService = AudioPlayerService();
+
   String? _currentUserId;
   String _recordingStatus = '';
-  int _recordingStep = 0; // 0: instructions, 1: recording, 2: processing, 3: complete
-  
+  int _recordingStep =
+      0; // 0: instructions, 1: recording, 2: processing, 3: complete
+
   // Voice naming
   final TextEditingController _voiceNameController = TextEditingController();
-  final TextEditingController _voiceDescriptionController = TextEditingController();
+  final TextEditingController _voiceDescriptionController =
+      TextEditingController();
   List<UserVoice> _userVoices = [];
 
   @override
@@ -42,7 +46,7 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
         setState(() {
           _currentUserId = userId;
         });
-        
+
         // Load existing voices
         await _loadUserVoices();
       }
@@ -58,17 +62,17 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
         timer.cancel();
         return;
       }
-      
+
       // Check if recording was auto-stopped
       if (_recordingStep == 1 && !_recordingService.isRecording) {
         timer.cancel();
         print('🔄 Auto-stop detected, transitioning to processing...');
-        
+
         setState(() {
           _recordingStep = 2;
           _recordingStatus = 'Auto-stopped. Validating recording quality...';
         });
-        
+
         // Process the recording
         _processRecording();
       }
@@ -77,7 +81,7 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
 
   Future<void> _loadUserVoices() async {
     if (_currentUserId == null) return;
-    
+
     try {
       final voices = await _voiceCloningService.getUserVoices(_currentUserId!);
       setState(() {
@@ -99,9 +103,67 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
     }
   }
 
+  Future<void> _selectVoiceForPlayback(UserVoice voice) async {
+    if (_currentUserId == null) {
+      return;
+    }
+
+    try {
+      final result = await _audioPlayerService.handleVoiceChange(
+        newVoiceId: voice.voiceId,
+        voiceType: 'custom',
+        userId: _currentUserId,
+      );
+
+      if (mounted) {
+        switch (result) {
+          case VoiceChangeResult.success:
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Switching playback to ${voice.voiceName}'),
+                backgroundColor: AppTheme.accentColor,
+              ),
+            );
+            break;
+          case VoiceChangeResult.noActivePlayback:
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Voice selected. It will be used the next time you start playback.',
+                ),
+                backgroundColor: AppTheme.accentColor,
+              ),
+            );
+            break;
+          case VoiceChangeResult.failed:
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text(
+                  'Voice change failed — using previous voice.',
+                ),
+                backgroundColor: AppTheme.errorColor,
+              ),
+            );
+            break;
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Unable to switch voice: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _renameVoice(UserVoice voice) async {
     final nameController = TextEditingController(text: voice.voiceName);
-    final descriptionController = TextEditingController(text: voice.voiceDescription ?? '');
+    final descriptionController = TextEditingController(
+      text: voice.voiceDescription ?? '',
+    );
 
     final result = await showDialog<bool>(
       context: context,
@@ -152,10 +214,12 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
           _currentUserId!,
           voice.voiceId,
           nameController.text.trim(),
-          voiceDescription: descriptionController.text.trim().isNotEmpty ? descriptionController.text.trim() : null,
+          voiceDescription: descriptionController.text.trim().isNotEmpty
+              ? descriptionController.text.trim()
+              : null,
         );
         await _loadUserVoices(); // Reload to update UI
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -182,7 +246,9 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Voice'),
-        content: Text('Are you sure you want to delete "${voice.voiceName}"? This action cannot be undone.'),
+        content: Text(
+          'Are you sure you want to delete "${voice.voiceName}"? This action cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -190,9 +256,7 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Delete'),
           ),
         ],
@@ -203,7 +267,7 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
       try {
         await _voiceCloningService.deleteVoice(_currentUserId!, voice.voiceId);
         await _loadUserVoices(); // Reload to update UI
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -303,14 +367,10 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
               ),
             ],
           ),
-          child: const Icon(
-            Icons.mic,
-            size: 80,
-            color: Colors.white,
-          ),
+          child: const Icon(Icons.mic, size: 80, color: Colors.white),
         ),
         const SizedBox(height: 32),
-        
+
         // Title
         const Text(
           'Record Your Voice',
@@ -321,23 +381,19 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
           ),
         ),
         const SizedBox(height: 16),
-        
+
         // Description
         const Text(
           'Create your personalized voice for storytelling. Your child will hear your voice in every story.',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 16,
-            color: Colors.white70,
-            height: 1.4,
-          ),
+          style: TextStyle(fontSize: 16, color: Colors.white70, height: 1.4),
         ),
         const SizedBox(height: 32),
-        
+
         // Instructions
         _buildInstructionsList(),
         const SizedBox(height: 32),
-        
+
         // Sample Text
         _buildSampleText(),
       ],
@@ -346,7 +402,7 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
 
   Widget _buildInstructionsList() {
     final instructions = _voiceCloningService.getRecordingInstructions();
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -365,29 +421,31 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
             ),
           ),
           const SizedBox(height: 12),
-          ...instructions.map((instruction) => Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.check_circle,
-                  color: AppTheme.accentColor,
-                  size: 16,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    instruction,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.white70,
+          ...instructions.map(
+            (instruction) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.check_circle,
+                    color: AppTheme.accentColor,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      instruction,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.white70,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          )),
+          ),
         ],
       ),
     );
@@ -395,7 +453,7 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
 
   Widget _buildSampleText() {
     final sampleText = _voiceCloningService.getSampleRecordingText();
-    
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -468,19 +526,12 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: Colors.red.withValues(alpha: 0.2),
-            border: Border.all(
-              color: Colors.red,
-              width: 3,
-            ),
+            border: Border.all(color: Colors.red, width: 3),
           ),
-          child: const Icon(
-            Icons.mic,
-            size: 80,
-            color: Colors.red,
-          ),
+          child: const Icon(Icons.mic, size: 80, color: Colors.red),
         ),
         const SizedBox(height: 32),
-        
+
         // Recording Status
         const Text(
           'Recording...',
@@ -491,21 +542,18 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
           ),
         ),
         const SizedBox(height: 16),
-        
+
         Text(
           _recordingStatus,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 16,
-            color: Colors.white70,
-          ),
+          style: const TextStyle(fontSize: 16, color: Colors.white70),
         ),
         const SizedBox(height: 24),
-        
+
         // Sample text (prominently displayed)
         _buildSampleText(),
         const SizedBox(height: 24),
-        
+
         // Recording Tips
         Container(
           padding: const EdgeInsets.all(16),
@@ -550,7 +598,7 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
           ),
         ),
         const SizedBox(height: 32),
-        
+
         // Processing Status
         const Text(
           'Processing Your Voice',
@@ -561,17 +609,14 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
           ),
         ),
         const SizedBox(height: 16),
-        
+
         Text(
           _recordingStatus,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 16,
-            color: Colors.white70,
-          ),
+          style: const TextStyle(fontSize: 16, color: Colors.white70),
         ),
         const SizedBox(height: 32),
-        
+
         // Processing Info
         Container(
           padding: const EdgeInsets.all(16),
@@ -582,10 +627,7 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
           child: const Text(
             'This may take a few minutes. Your voice is being processed to create a personalized model.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.white70,
-            ),
+            style: TextStyle(fontSize: 14, color: Colors.white70),
           ),
         ),
       ],
@@ -602,10 +644,7 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: AppTheme.successColor.withValues(alpha: 0.2),
-            border: Border.all(
-              color: AppTheme.successColor,
-              width: 3,
-            ),
+            border: Border.all(color: AppTheme.successColor, width: 3),
           ),
           child: const Icon(
             Icons.check,
@@ -614,7 +653,7 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
           ),
         ),
         const SizedBox(height: 32),
-        
+
         // Success Message
         const Text(
           'Voice Cloned Successfully!',
@@ -625,18 +664,14 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
           ),
         ),
         const SizedBox(height: 16),
-        
+
         const Text(
           'Your personalized voice is ready. Your child will now hear your voice in every story.',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 16,
-            color: Colors.white70,
-            height: 1.4,
-          ),
+          style: TextStyle(fontSize: 16, color: Colors.white70, height: 1.4),
         ),
         const SizedBox(height: 32),
-        
+
         // Show existing voices
         if (_userVoices.isNotEmpty) ...[
           const Text(
@@ -651,7 +686,7 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
           _buildVoicesList(),
           const SizedBox(height: 24),
         ],
-        
+
         // Features
         _buildSuccessFeatures(),
       ],
@@ -685,6 +720,7 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
             color: Colors.white.withValues(alpha: 0.1),
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
+              onTap: () => _selectVoiceForPlayback(voice),
               leading: const Icon(
                 Icons.record_voice_over,
                 color: Colors.white70,
@@ -758,28 +794,26 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
             ),
           ),
           const SizedBox(height: 12),
-          ...features.map((feature) => Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.star,
-                  color: AppTheme.accentColor,
-                  size: 16,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    feature,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.white70,
+          ...features.map(
+            (feature) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.star, color: AppTheme.accentColor, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      feature,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.white70,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          )),
+          ),
         ],
       ),
     );
@@ -881,18 +915,18 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
       });
 
       print('🎤 Starting recording...');
-      
+
       // Reset any previous recording state
       _recordingService.resetRecordingState();
-      
+
       final success = await _recordingService.startRecording();
-      
+
       if (success) {
         setState(() {
           _recordingStatus = 'Recording in progress... Speak clearly!';
         });
         print('✅ Recording started successfully');
-        
+
         // Start monitoring for auto-stop
         _monitorRecordingState();
       } else {
@@ -903,17 +937,18 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
       setState(() {
         _recordingStep = 0;
       });
-      
+
       if (mounted) {
         String errorMessage = 'Recording failed: $e';
-        
+
         // Provide specific error messages
         if (e.toString().contains('permission')) {
-          errorMessage = 'Microphone permission denied. Please enable microphone access in settings.';
+          errorMessage =
+              'Microphone permission denied. Please enable microphone access in settings.';
         } else if (e.toString().contains('audio')) {
           errorMessage = 'Audio recording error. Please try again.';
         }
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(errorMessage),
@@ -933,7 +968,7 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
 
       print('🛑 Stopping recording...');
       final recordingPath = await _recordingService.stopRecording();
-      
+
       if (recordingPath != null) {
         print('✅ Recording stopped successfully: $recordingPath');
         setState(() {
@@ -950,17 +985,18 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
       setState(() {
         _recordingStep = 0;
       });
-      
+
       if (mounted) {
         String errorMessage = 'Stop recording failed: $e';
-        
+
         // Show specific error message for API permission issues
         if (e.toString().contains('missing_permissions')) {
-          errorMessage = 'API Permission Error: Please check your ElevenLabs API key has voices_write permission.';
+          errorMessage =
+              'API Permission Error: Please check your ElevenLabs API key has voices_write permission.';
         } else if (e.toString().contains('401')) {
           errorMessage = 'Authentication Error: Invalid ElevenLabs API key.';
         }
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(errorMessage),
@@ -1016,14 +1052,14 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
 
       // Clone voice using ElevenLabs with custom name
       await _voiceCloningService.cloneVoice(
-        File(recordingPath), 
+        File(recordingPath),
         _currentUserId!,
         voiceName,
-        voiceDescription: _voiceDescriptionController.text.isNotEmpty 
-            ? _voiceDescriptionController.text 
+        voiceDescription: _voiceDescriptionController.text.isNotEmpty
+            ? _voiceDescriptionController.text
             : null,
       );
-      
+
       setState(() {
         _recordingStep = 3;
         _recordingStatus = 'Voice cloning completed successfully!';
@@ -1031,7 +1067,7 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
 
       // Reload voices
       await _loadUserVoices();
-      
+
       // Clear text controllers
       _voiceNameController.clear();
       _voiceDescriptionController.clear();
@@ -1042,23 +1078,26 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
       setState(() {
         _recordingStep = 0;
       });
-      
+
       if (mounted) {
         String errorMessage = 'Voice processing failed: $e';
-        
+
         // Handle specific error cases
-        if (e.toString().contains('duplicate key value') || 
+        if (e.toString().contains('duplicate key value') ||
             e.toString().contains('unique constraint') ||
             e.toString().contains('user_voices_user_id_voice_name_key')) {
-          errorMessage = 'A voice with this name already exists. Please use a different name or delete the existing voice first.';
+          errorMessage =
+              'A voice with this name already exists. Please use a different name or delete the existing voice first.';
         } else if (e.toString().contains('missing_permissions')) {
-          errorMessage = 'API Permission Error: Please check your ElevenLabs API key has voices_write permission.';
+          errorMessage =
+              'API Permission Error: Please check your ElevenLabs API key has voices_write permission.';
         } else if (e.toString().contains('401')) {
           errorMessage = 'Authentication Error: Invalid ElevenLabs API key.';
         } else if (e.toString().contains('quota')) {
-          errorMessage = 'API Quota Exceeded: You have reached your ElevenLabs API quota.';
+          errorMessage =
+              'API Quota Exceeded: You have reached your ElevenLabs API quota.';
         }
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(errorMessage),
@@ -1075,7 +1114,7 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
       if (_currentUserId != null) {
         await _voiceCloningService.deleteClonedVoice(_currentUserId!);
       }
-      
+
       setState(() {
         _recordingStep = 0;
         _recordingStatus = '';
@@ -1094,7 +1133,9 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Give your voice a name so you can easily identify it later.'),
+            const Text(
+              'Give your voice a name so you can easily identify it later.',
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: _voiceNameController,
@@ -1149,22 +1190,24 @@ class _VoiceCloningPageState extends State<VoiceCloningPage> {
                 );
                 return;
               }
-              
+
               // Check if name already exists
-              final isDuplicate = _userVoices.any((v) => 
-                v.voiceName.toLowerCase() == voiceName.toLowerCase()
+              final isDuplicate = _userVoices.any(
+                (v) => v.voiceName.toLowerCase() == voiceName.toLowerCase(),
               );
-              
+
               if (isDuplicate) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Voice name "$voiceName" already exists. Please use a different name.'),
+                    content: Text(
+                      'Voice name "$voiceName" already exists. Please use a different name.',
+                    ),
                     backgroundColor: AppTheme.errorColor,
                   ),
                 );
                 return;
               }
-              
+
               Navigator.pop(context, voiceName);
             },
             child: const Text('Save Voice'),

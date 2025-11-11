@@ -1,27 +1,50 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path/path.dart' as p;
 import '../../../config/environment.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../shared/models/user_voice.dart';
 import 'audio_mixing_service.dart';
+import 'audio_post_processing_service.dart';
+import 'story_emotion_mapper.dart';
+import 'voice_change_event.dart';
 
 class VoiceCloningService {
   static const String _baseUrl = Environment.elevenLabsBaseUrl;
   static const String _apiKey = Environment.elevenLabsApiKey;
-  static const int _requiredDurationSeconds = Environment.maxRecordingDurationSeconds;
+  static const int _requiredDurationSeconds =
+      Environment.maxRecordingDurationSeconds;
+  static const String _defaultModelId = 'eleven_multilingual_v2';
+  static const int _maxTtsRetries = 3;
+  static const Duration _retryDelay = Duration(seconds: 2);
+
+  static final StreamController<VoiceChangeEvent> _voiceChangeController =
+      StreamController<VoiceChangeEvent>.broadcast();
+
+  static Stream<VoiceChangeEvent> get voiceChangeStream =>
+      _voiceChangeController.stream;
 
   // Default ElevenLabs voice IDs
   static const String _defaultMaleVoiceId = 'MV2lIGFO3SleI2bwL8Cp';
   static const String _defaultFemaleVoiceId = 'wlmwDR77ptH6bKHZui0l';
-  
+
   final AudioMixingService _audioMixingService = AudioMixingService();
+  final AudioPostProcessingService _postProcessingService =
+      AudioPostProcessingService();
+  final StoryEmotionMapper _emotionMapper = StoryEmotionMapper();
 
   /// Clone voice from audio file using ElevenLabs with custom name
-  Future<String> cloneVoice(File audioFile, String userId, String voiceName, {String? voiceDescription}) async {
+  Future<String> cloneVoice(
+    File audioFile,
+    String userId,
+    String voiceName, {
+    String? voiceDescription,
+  }) async {
     try {
       // Validate audio quality first
       final isValid = await validateAudioQuality(audioFile);
@@ -40,46 +63,53 @@ class VoiceCloningService {
 
       // Add audio file
       request.files.add(
-        await http.MultipartFile.fromPath(
-          'files',
-          audioFile.path,
-        ),
+        await http.MultipartFile.fromPath('files', audioFile.path),
       );
 
       // Add voice metadata
       request.fields['name'] = '$voiceName - $userId';
-      request.fields['description'] = voiceDescription ?? 'Personalized voice for StoryHug user $userId';
+      request.fields['description'] =
+          voiceDescription ?? 'Personalized voice for StoryHug user $userId';
 
       final response = await request.send();
-      
+
       if (response.statusCode == 200) {
         final responseBody = await response.stream.bytesToString();
         final data = json.decode(responseBody);
-        
+
         if (data['voice_id'] != null) {
           // Save voice with custom name to Supabase
-          await _saveVoiceWithName(userId, data['voice_id'], voiceName, voiceDescription);
+          await _saveVoiceWithName(
+            userId,
+            data['voice_id'],
+            voiceName,
+            voiceDescription,
+          );
           return data['voice_id'];
         } else {
           throw Exception('Voice cloning failed: No voice ID returned');
         }
       } else {
         final errorBody = await response.stream.bytesToString();
-        
+
         // Handle specific API permission errors
         if (response.statusCode == 401) {
           try {
             final errorData = json.decode(errorBody);
-            if (errorData['detail'] != null && 
+            if (errorData['detail'] != null &&
                 errorData['detail']['status'] == 'missing_permissions') {
-              throw Exception('ElevenLabs API key missing permissions. Please check your API key has voices_write permission.');
+              throw Exception(
+                'ElevenLabs API key missing permissions. Please check your API key has voices_write permission.',
+              );
             }
           } catch (e) {
             // If JSON parsing fails, use original error
           }
         }
-        
-        throw Exception('Voice cloning failed: ${response.statusCode} - $errorBody');
+
+        throw Exception(
+          'Voice cloning failed: ${response.statusCode} - $errorBody',
+        );
       }
     } catch (e) {
       throw Exception('Voice cloning error: $e');
@@ -90,77 +120,72 @@ class VoiceCloningService {
   Future<String> generateAudioWithClonedVoice({
     required String voiceId,
     required String text,
+    StoryEmotionPreset? preset,
     String? fileName,
-    double speakingRate = 0.15, // Extremely slow speed for storytelling
   }) async {
-    try {
-      final request = http.Request(
-        'POST',
-        Uri.parse('$_baseUrl/text-to-speech/$voiceId'),
-      );
+    final effectivePreset = preset ?? const StoryEmotionPreset.neutralWarm();
+    final payload = _buildTtsPayload(text: text, preset: effectivePreset);
+    final targetFileName =
+        fileName ?? 'story_${DateTime.now().millisecondsSinceEpoch}.mp3';
 
-      request.headers['xi-api-key'] = _apiKey;
-      request.headers['Content-Type'] = 'application/json';
+    Exception? lastError;
 
-      final requestBody = {
-        'text': text,
-        'model_id': 'eleven_multilingual_v2', // Best model for multiple languages
-        'voice_settings': {
-          'stability': 0.8, // Higher for more consistent storytelling
-          'similarity_boost': 0.9, // Higher for better voice cloning
-          'style': 0.05, // Very low style for natural storytelling
-          'use_speaker_boost': true,
-          'speaking_rate': speakingRate, // Much slower speed for storytelling
-        },
-      };
+    for (var attempt = 0; attempt < _maxTtsRetries; attempt++) {
+      try {
+        final response = await _sendTtsRequest(
+          voiceId: voiceId,
+          payload: payload,
+        );
 
-      request.body = json.encode(requestBody);
+        if (response.statusCode == 200) {
+          final audioBytes = await response.stream.toBytes();
+          final audioFile = await _saveAudioFile(audioBytes, targetFileName);
+          await _postProcessingService.finalize(audioFile);
+          return audioFile.path;
+        }
 
-      final response = await request.send();
-      
-      if (response.statusCode == 200) {
-      // Save audio file locally
-      final audioBytes = await response.stream.toBytes();
-      final finalFileName = fileName ?? 'story_${DateTime.now().millisecondsSinceEpoch}.mp3';
-      final audioFile = await _saveAudioFile(audioBytes, finalFileName);
-        return audioFile.path;
-      } else {
         final errorBody = await response.stream.bytesToString();
-        throw Exception('Audio generation failed: ${response.statusCode} - $errorBody');
+        lastError = Exception(
+          'Audio generation failed: ${response.statusCode} - $errorBody',
+        );
+      } catch (e) {
+        lastError = Exception('Audio generation error: $e');
       }
-    } catch (e) {
-      throw Exception('Audio generation error: $e');
+
+      if (attempt < _maxTtsRetries - 1) {
+        await Future.delayed(_retryDelay * (attempt + 1));
+      }
     }
+
+    throw lastError ?? Exception('Audio generation failed after retries');
   }
 
   /// Generate audio with cloned voice - handles both audio and text-only stories
   Future<String> generatePersonalizedAudio({
     required String voiceId,
     required String storyText,
+    StoryEmotionPreset? preset,
     String? originalAudioUrl,
     String? fileName,
     bool preferBackgroundMusic = true,
   }) async {
     try {
-      // Check if we have original audio and user wants background music
-      if (originalAudioUrl != null && 
-          originalAudioUrl.isNotEmpty && 
+      if (originalAudioUrl != null &&
+          originalAudioUrl.isNotEmpty &&
           preferBackgroundMusic) {
-        
-        // Mode 1: Audio + Text (with background music)
         return await generateAudioWithBackgroundMusic(
           voiceId: voiceId,
           text: storyText,
           originalAudioPath: originalAudioUrl,
+          preset: preset,
           fileName: fileName,
         );
       } else {
-        // Mode 2: Text-only (voice-only generation)
         return await generateAudioWithClonedVoice(
           voiceId: voiceId,
           text: storyText,
+          preset: preset,
           fileName: fileName,
-          speakingRate: 0.15, // Extremely slow speed for storytelling
         );
       }
     } catch (e) {
@@ -170,24 +195,25 @@ class VoiceCloningService {
 
   /// Detect if story has audio or is text-only
   bool hasAudioContent(String? audioUrl) {
-    return audioUrl != null && 
-           audioUrl.isNotEmpty && 
-           audioUrl != 'null' &&
-           !audioUrl.contains('placeholder') &&
-           audioUrl.startsWith('http');
+    return audioUrl != null &&
+        audioUrl.isNotEmpty &&
+        audioUrl != 'null' &&
+        !audioUrl.contains('placeholder') &&
+        audioUrl.startsWith('http');
   }
 
   /// Get optimal audio generation strategy based on story content
   Future<String> getOptimalAudioStrategy({
     required String voiceId,
     required String storyText,
+    StoryEmotionPreset? preset,
     String? originalAudioUrl,
     String? fileName,
   }) async {
     try {
       // Check if story has audio content
       final hasAudio = hasAudioContent(originalAudioUrl);
-      
+
       if (hasAudio) {
         // Strategy 1: Mix cloned voice with original background music
         print('Using audio mixing strategy: Voice + BGM');
@@ -195,6 +221,7 @@ class VoiceCloningService {
           voiceId: voiceId,
           text: storyText,
           originalAudioPath: originalAudioUrl!,
+          preset: preset,
           fileName: fileName,
         );
       } else {
@@ -203,8 +230,8 @@ class VoiceCloningService {
         return await generateAudioWithClonedVoice(
           voiceId: voiceId,
           text: storyText,
+          preset: preset,
           fileName: fileName,
-          speakingRate: 0.15, // Extremely slow speed for storytelling
         );
       }
     } catch (e) {
@@ -217,22 +244,25 @@ class VoiceCloningService {
     required String voiceId,
     required String text,
     required String originalAudioPath,
+    StoryEmotionPreset? preset,
     String? fileName,
   }) async {
     try {
-      // First generate voice-only audio
       final voiceOnlyPath = await generateAudioWithClonedVoice(
         voiceId: voiceId,
         text: text,
-        fileName: fileName ?? 'voice_only_${DateTime.now().millisecondsSinceEpoch}.mp3',
-        speakingRate: 0.15, // Extremely slow speed for storytelling
+        preset: preset,
+        fileName:
+            fileName ??
+            'voice_only_${DateTime.now().millisecondsSinceEpoch}.mp3',
       );
 
       // Then mix with background music
       final mixedAudioPath = await _audioMixingService.mixVoiceWithBGM(
         clonedVoicePath: voiceOnlyPath,
         originalAudioPath: originalAudioPath,
-        outputFileName: fileName ?? 'mixed_${DateTime.now().millisecondsSinceEpoch}.mp3',
+        outputFileName:
+            fileName ?? 'mixed_${DateTime.now().millisecondsSinceEpoch}.mp3',
       );
 
       return mixedAudioPath;
@@ -268,11 +298,11 @@ class VoiceCloningService {
       // Fallback to local storage
       final prefs = await SharedPreferences.getInstance();
       final localVoiceId = prefs.getString('voice_id_$userId');
-      
+
       if (localVoiceId != null && localVoiceId.isNotEmpty) {
         return localVoiceId;
       }
-      
+
       // NO automatic fallback - return null if no default voice is set
       print('No default voice set for user: $e');
       return null;
@@ -305,7 +335,7 @@ class VoiceCloningService {
           .eq('is_active', true)
           .order('is_default', ascending: false)
           .order('created_at', ascending: false);
-      
+
       return (response as List)
           .map((voice) => UserVoice.fromJson(voice))
           .toList();
@@ -325,7 +355,7 @@ class VoiceCloningService {
           .eq('is_default', true)
           .eq('is_active', true)
           .single();
-      
+
       return UserVoice.fromJson(response);
     } catch (e) {
       print('Error getting default voice: $e');
@@ -339,16 +369,26 @@ class VoiceCloningService {
       // First, unset all default voices for this user
       await SupabaseService.client
           .from('user_voices')
-          .update({'is_default': false, 'updated_at': DateTime.now().toIso8601String()})
+          .update({
+            'is_default': false,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
           .eq('user_id', userId)
           .eq('is_default', true);
-      
+
       // Then set the specified voice as default
       await SupabaseService.client
           .from('user_voices')
-          .update({'is_default': true, 'updated_at': DateTime.now().toIso8601String()})
+          .update({
+            'is_default': true,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
           .eq('user_id', userId)
           .eq('voice_id', voiceId);
+
+      _voiceChangeController.add(
+        VoiceChangeEvent(userId: userId, voiceId: voiceId),
+      );
     } catch (e) {
       throw Exception('Failed to set default voice: $e');
     }
@@ -359,7 +399,10 @@ class VoiceCloningService {
     try {
       await SupabaseService.client
           .from('user_voices')
-          .update({'is_active': false, 'updated_at': DateTime.now().toIso8601String()})
+          .update({
+            'is_active': false,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
           .eq('user_id', userId)
           .eq('voice_id', voiceId);
     } catch (e) {
@@ -394,7 +437,12 @@ class VoiceCloningService {
   }
 
   /// Update voice name and description
-  Future<void> updateVoice(String userId, String voiceId, String voiceName, {String? voiceDescription}) async {
+  Future<void> updateVoice(
+    String userId,
+    String voiceId,
+    String voiceName, {
+    String? voiceDescription,
+  }) async {
     try {
       await SupabaseService.client
           .from('user_voices')
@@ -411,23 +459,26 @@ class VoiceCloningService {
   }
 
   /// Save voice with custom name to Supabase
-  Future<void> _saveVoiceWithName(String userId, String voiceId, String voiceName, String? voiceDescription) async {
+  Future<void> _saveVoiceWithName(
+    String userId,
+    String voiceId,
+    String voiceName,
+    String? voiceDescription,
+  ) async {
     try {
       // NO automatic default setting - user must manually set default
-      
+
       // Save to Supabase
-      await SupabaseService.client
-          .from('user_voices')
-          .insert({
-            'user_id': userId,
-            'voice_id': voiceId,
-            'voice_name': voiceName,
-            'voice_description': voiceDescription,
-            'is_default': false, // Never auto-set as default
-            'is_active': true,
-            'created_at': DateTime.now().toIso8601String(),
-            'updated_at': DateTime.now().toIso8601String(),
-          });
+      await SupabaseService.client.from('user_voices').insert({
+        'user_id': userId,
+        'voice_id': voiceId,
+        'voice_name': voiceName,
+        'voice_description': voiceDescription,
+        'is_default': false, // Never auto-set as default
+        'is_active': true,
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      });
 
       // Save to local storage as backup
       final prefs = await SharedPreferences.getInstance();
@@ -446,14 +497,12 @@ class VoiceCloningService {
   Future<void> _saveVoiceId(String userId, String voiceId) async {
     try {
       // Save to Supabase
-      await SupabaseService.client
-          .from('user_voices')
-          .upsert({
-            'user_id': userId,
-            'voice_id': voiceId,
-            'created_at': DateTime.now().toIso8601String(),
-            'updated_at': DateTime.now().toIso8601String(),
-          });
+      await SupabaseService.client.from('user_voices').upsert({
+        'user_id': userId,
+        'voice_id': voiceId,
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      });
 
       // Save to local storage as backup
       final prefs = await SharedPreferences.getInstance();
@@ -466,17 +515,48 @@ class VoiceCloningService {
     }
   }
 
+  Future<http.StreamedResponse> _sendTtsRequest({
+    required String voiceId,
+    required Map<String, dynamic> payload,
+  }) {
+    final request = http.Request(
+      'POST',
+      Uri.parse('$_baseUrl/text-to-speech/$voiceId'),
+    );
+
+    request.headers['xi-api-key'] = _apiKey;
+    request.headers['Content-Type'] = 'application/json';
+    request.body = json.encode(payload);
+
+    return request.send();
+  }
+
+  Map<String, dynamic> _buildTtsPayload({
+    required String text,
+    required StoryEmotionPreset preset,
+  }) {
+    final voiceSettings = preset.toVoiceSettings();
+    return {
+      'text': text,
+      'model_id': _defaultModelId,
+      'voice_settings': voiceSettings,
+      'emotion': preset.emotion,
+      'emotional_tone': preset.emotion,
+      'optimize_streaming_latency': 3,
+      'output_format': 'mp3_44100_128',
+    };
+  }
+
   /// Save generated audio file
   Future<File> _saveAudioFile(List<int> audioBytes, String fileName) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final audioDir = Directory('${directory.path}/generated_audio');
-    
-    if (!await audioDir.exists()) {
-      await audioDir.create(recursive: true);
-    }
-    
-    final file = File('${audioDir.path}/$fileName');
-    await file.writeAsBytes(audioBytes);
+    final directoryPath = await _postProcessingService.ensureDirectory(
+      'generated_audio',
+    );
+    final filePath = p.join(directoryPath, fileName);
+    final file = File(filePath);
+
+    await file.create(recursive: true);
+    await file.writeAsBytes(audioBytes, flush: true);
     return file;
   }
 
@@ -531,20 +611,20 @@ Hello! This is my voice sample for StoryHug. I'm recording this to create a pers
       final voiceId = await getVoiceId(userId);
       if (voiceId != null) {
         // Delete from ElevenLabs
-      final request = http.Request(
+        final request = http.Request(
           'DELETE',
           Uri.parse('$_baseUrl/voices/$voiceId'),
-      );
-      request.headers['xi-api-key'] = _apiKey;
-        
+        );
+        request.headers['xi-api-key'] = _apiKey;
+
         await request.send();
-        
+
         // Remove from Supabase
         await SupabaseService.client
             .from('user_voices')
             .delete()
             .eq('user_id', userId);
-        
+
         // Remove from local storage
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove('voice_id_$userId');
@@ -578,7 +658,7 @@ Hello! This is my voice sample for StoryHug. I'm recording this to create a pers
     try {
       final directory = await getTemporaryDirectory();
       final files = directory.listSync();
-      
+
       for (final file in files) {
         if (file.path.contains('voice_recording_') && file is File) {
           await file.delete();
@@ -607,11 +687,10 @@ Hello! This is my voice sample for StoryHug. I'm recording this to create a pers
   }
 
   Future<String> generateStoryAudio(String storyText, String voiceId) async {
-    // This method is kept for backward compatibility
     return await generateAudioWithClonedVoice(
       voiceId: voiceId,
       text: storyText,
-      speakingRate: 0.15, // Extremely slow speed for storytelling
+      preset: const StoryEmotionPreset.neutralWarm(),
     );
   }
 }

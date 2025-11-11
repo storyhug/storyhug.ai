@@ -13,7 +13,7 @@ import '../../voice_cloning/services/voice_cloning_service.dart';
 
 class StoryPlayerScreen extends StatefulWidget {
   final Story story;
-  
+
   const StoryPlayerScreen({super.key, required this.story});
 
   @override
@@ -27,7 +27,8 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
   String? _selectedVoiceId;
-  String? _selectedVoiceType; // null (not selected), 'ai_male', 'ai_female', 'custom'
+  String?
+  _selectedVoiceType; // null (not selected), 'ai_male', 'ai_female', 'custom'
   bool _isRepeatMode = false;
   int? _sleepTimerMinutes;
   bool _isLoading = false;
@@ -40,7 +41,7 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
   StreamSubscription<Duration>? _positionSubscription;
   StreamSubscription<PlayerState>? _playerStateSubscription;
   Timer? _positionTimer;
-  
+
   // Manual time tracking like Android approach
   Timer? _timeUpdateTimer;
 
@@ -73,7 +74,7 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
 
   void _setupAudioPlayer() {
     _cleanupListeners();
-    
+
     _positionSubscription = _audioPlayer.positionStream.listen((position) {
       debugPrint('🎵 Position updated: ${position.inSeconds}s');
       if (mounted) {
@@ -99,7 +100,7 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
           _playerState = state;
         });
       }
-      
+
       // Start/stop time update timer based on playing state (Android approach)
       if (state == PlayerState.playing) {
         _startTimeUpdateTimer();
@@ -133,25 +134,29 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
       setState(() {
         _isLoadingVoices = true;
       });
-      
+
       final userId = SupabaseService.client.auth.currentUser?.id;
       debugPrint('📢 Loading voices for user: $userId');
-      
+
       if (userId != null) {
         final voices = await _voiceCloningService.getUserVoices(userId);
-        debugPrint('📢 Loaded ${voices.length} voices: ${voices.map((v) => v.voiceName).toList()}');
-        
+        debugPrint(
+          '📢 Loaded ${voices.length} voices: ${voices.map((v) => v.voiceName).toList()}',
+        );
+
         // Debug: Print detailed voice info
         for (var voice in voices) {
-          debugPrint('📢 Voice: ${voice.voiceName} | ID: ${voice.voiceId} | Default: ${voice.isDefault} | Active: ${voice.isActive}');
+          debugPrint(
+            '📢 Voice: ${voice.voiceName} | ID: ${voice.voiceId} | Default: ${voice.isDefault} | Active: ${voice.isActive}',
+          );
         }
-        
+
         if (mounted) {
           setState(() {
             _userVoices = voices;
             _isLoadingVoices = false;
           });
-          
+
           // Show user-friendly message if voices were loaded
           if (voices.isNotEmpty && _selectedVoiceType == 'custom') {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -178,7 +183,7 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
         setState(() {
           _isLoadingVoices = false;
         });
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error loading voices: $e'),
@@ -230,8 +235,9 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
             isParentVoice: _selectedVoiceType != null,
             userId: userId,
             storyId: widget.story.id,
-            selectedVoiceId:
-                _selectedVoiceType == 'custom' ? _selectedVoiceId : null,
+            selectedVoiceId: _selectedVoiceType == 'custom'
+                ? _selectedVoiceId
+                : null,
             story: widget.story,
             voiceType: _selectedVoiceType ?? 'ai_male',
           );
@@ -241,8 +247,9 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
             isParentVoice: _selectedVoiceType != null,
             userId: userId,
             storyId: widget.story.id,
-            selectedVoiceId:
-                _selectedVoiceType == 'custom' ? _selectedVoiceId : null,
+            selectedVoiceId: _selectedVoiceType == 'custom'
+                ? _selectedVoiceId
+                : null,
             story: widget.story,
             voiceType: _selectedVoiceType ?? 'ai_male',
           );
@@ -291,7 +298,10 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
           children: [
             ListTile(
               leading: const Icon(Icons.volume_up, color: Colors.white),
-              title: const Text('Volume', style: TextStyle(color: Colors.white)),
+              title: const Text(
+                'Volume',
+                style: TextStyle(color: Colors.white),
+              ),
               trailing: Slider(
                 value: _volume,
                 onChanged: (value) {
@@ -309,7 +319,10 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
                 _isRepeatMode ? Icons.repeat_on : Icons.repeat,
                 color: Colors.white,
               ),
-              title: const Text('Repeat', style: TextStyle(color: Colors.white)),
+              title: const Text(
+                'Repeat',
+                style: TextStyle(color: Colors.white),
+              ),
               trailing: Switch(
                 value: _isRepeatMode,
                 onChanged: (value) {
@@ -322,7 +335,10 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.timer, color: Colors.white),
-              title: const Text('Sleep Timer', style: TextStyle(color: Colors.white)),
+              title: const Text(
+                'Sleep Timer',
+                style: TextStyle(color: Colors.white),
+              ),
               trailing: DropdownButton<int?>(
                 value: _sleepTimerMinutes,
                 items: [
@@ -355,13 +371,19 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.2),
+            width: 1,
+          ),
         ),
         child: const Center(
           child: SizedBox(
             height: 16,
             width: 16,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white,
+            ),
           ),
         ),
       );
@@ -373,7 +395,10 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.2),
+          width: 1,
+        ),
       ),
       child: Column(
         children: [
@@ -386,34 +411,68 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
                   color: AppTheme.accentColor.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Icon(Icons.record_voice_over, size: 12, color: AppTheme.accentColor),
+                child: const Icon(
+                  Icons.record_voice_over,
+                  size: 12,
+                  color: AppTheme.accentColor,
+                ),
               ),
               const SizedBox(width: 6),
               const Text(
                 'Voice:',
-                style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
               const SizedBox(width: 6),
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      width: 1,
+                    ),
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String?>(
                       value: _selectedVoiceType,
                       isExpanded: true,
                       dropdownColor: Colors.grey.shade900,
-                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
-                      hint: const Text('Select Voice', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 12),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      hint: const Text(
+                        'Select Voice',
+                        style: TextStyle(color: Colors.white70, fontSize: 11),
+                      ),
+                      icon: const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: Colors.white,
+                        size: 12,
+                      ),
                       items: const [
-                        DropdownMenuItem(value: 'ai_male', child: Text('AI Male')),
-                        DropdownMenuItem(value: 'ai_female', child: Text('AI Female')),
-                        DropdownMenuItem(value: 'custom', child: Text('Custom')),
+                        DropdownMenuItem(
+                          value: 'ai_male',
+                          child: Text('AI Male'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'ai_female',
+                          child: Text('AI Female'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'custom',
+                          child: Text('Custom'),
+                        ),
                       ],
                       onChanged: (value) async {
                         if (value == null) return;
@@ -423,10 +482,47 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
                           if (value != 'custom') {
                             _selectedVoiceId = null;
                           } else {
-                            // Reload voices when custom is selected
                             _loadUserVoices();
                           }
                         });
+
+                        if (_playerState == PlayerState.playing) {
+                          final newVoiceId = _resolveVoiceId(value);
+                          if (newVoiceId != null) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Preparing new voice…'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                              setState(() {
+                                _playerState = PlayerState.paused;
+                              });
+                            }
+                            final result = await _audioPlayer.handleVoiceChange(
+                              newVoiceId: newVoiceId,
+                              voiceType: value,
+                              userId:
+                                  SupabaseService.client.auth.currentUser?.id,
+                              story: widget.story,
+                              isParentVoice: true,
+                              preferBackgroundMusic:
+                                  widget.story.hasAudioContent,
+                            );
+                            if (mounted) {
+                              _showVoiceChangeResult(result);
+                              setState(() {
+                                _playerState = PlayerState.playing;
+                              });
+                            }
+                          } else {
+                            _showVoiceChangeResult(
+                              VoiceChangeResult.noActivePlayback,
+                            );
+                          }
+                        }
+
                         if (_playerState != PlayerState.playing) {
                           await _togglePlayPause();
                         }
@@ -445,25 +541,70 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  width: 1,
+                ),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String?>(
                   value: _selectedVoiceId,
                   isExpanded: true,
                   dropdownColor: Colors.grey.shade900,
-                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
-                  hint: const Text('Select Voice', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                  icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 12),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  hint: const Text(
+                    'Select Voice',
+                    style: TextStyle(color: Colors.white70, fontSize: 11),
+                  ),
+                  icon: const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: Colors.white,
+                    size: 12,
+                  ),
                   items: _userVoices
-                      .map((v) => DropdownMenuItem(
-                            value: v.voiceId, // Use voiceId instead of id
-                            child: Text(v.voiceName),
-                          ))
+                      .map(
+                        (v) => DropdownMenuItem(
+                          value: v.voiceId, // Use voiceId instead of id
+                          child: Text(v.voiceName),
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) async {
                     debugPrint('📢 Custom voice selected: $value');
                     setState(() => _selectedVoiceId = value);
+
+                    if (_playerState == PlayerState.playing && value != null) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Preparing new voice…'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                        setState(() {
+                          _playerState = PlayerState.paused;
+                        });
+                      }
+                      final result = await _audioPlayer.handleVoiceChange(
+                        newVoiceId: value,
+                        voiceType: 'custom',
+                        userId: SupabaseService.client.auth.currentUser?.id,
+                        story: widget.story,
+                        isParentVoice: true,
+                        preferBackgroundMusic: widget.story.hasAudioContent,
+                      );
+                      if (mounted) {
+                        _showVoiceChangeResult(result);
+                        setState(() {
+                          _playerState = PlayerState.playing;
+                        });
+                      }
+                    }
+
                     if (value != null && _playerState != PlayerState.playing) {
                       await _togglePlayPause();
                     }
@@ -473,25 +614,38 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
             ),
           ],
           // Show message if no custom voices available
-          if (_selectedVoiceType == 'custom' && _userVoices.isEmpty && !_isLoadingVoices) ...[
+          if (_selectedVoiceType == 'custom' &&
+              _userVoices.isEmpty &&
+              !_isLoadingVoices) ...[
             const SizedBox(height: 4),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.orange.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.orange.withValues(alpha: 0.3), width: 1),
+                border: Border.all(
+                  color: Colors.orange.withValues(alpha: 0.3),
+                  width: 1,
+                ),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline, size: 10, color: Colors.orange),
+                  const Icon(
+                    Icons.info_outline,
+                    size: 10,
+                    color: Colors.orange,
+                  ),
                   const SizedBox(width: 4),
                   Expanded(
                     child: GestureDetector(
                       onTap: () => context.go('/voice-cloning'),
                       child: const Text(
                         'No custom voices. Tap to create one.',
-                        style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.w500),
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ),
@@ -539,7 +693,7 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
             _selectedVoiceId = null;
           }
         });
-        
+
         // Auto-play audio after voice selection
         if (_playerState != PlayerState.playing) {
           await _togglePlayPause();
@@ -549,7 +703,7 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          gradient: isSelected 
+          gradient: isSelected
               ? LinearGradient(
                   colors: [
                     AppTheme.accentColor.withValues(alpha: 0.3),
@@ -568,18 +722,20 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
                 ),
           borderRadius: BorderRadius.circular(25),
           border: Border.all(
-            color: isSelected 
+            color: isSelected
                 ? AppTheme.accentColor
                 : Colors.white.withValues(alpha: 0.4),
             width: isSelected ? 2 : 1,
           ),
-          boxShadow: isSelected ? [
-            BoxShadow(
-              color: AppTheme.accentColor.withValues(alpha: 0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ] : null,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppTheme.accentColor.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -604,7 +760,6 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
     );
   }
 
-
   Future<void> _seekRelative(int seconds) async {
     if (_duration.inSeconds > 0) {
       final newPosition = _position + Duration(seconds: seconds);
@@ -612,6 +767,50 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
         seconds: newPosition.inSeconds.clamp(0, _duration.inSeconds),
       );
       await _audioPlayer.seek(clampedPosition);
+    }
+  }
+
+  String? _resolveVoiceId(String? type) {
+    if (type == null) return null;
+    switch (type) {
+      case 'ai_male':
+        return 'MV2lIGFO3SleI2bwL8Cp';
+      case 'ai_female':
+        return 'wlmwDR77ptH6bKHZui0l';
+      case 'custom':
+        return _selectedVoiceId;
+      default:
+        return null;
+    }
+  }
+
+  void _showVoiceChangeResult(VoiceChangeResult result) {
+    if (!mounted) return;
+    switch (result) {
+      case VoiceChangeResult.success:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Switching playback to new voice'),
+            backgroundColor: AppTheme.accentColor,
+          ),
+        );
+        break;
+      case VoiceChangeResult.noActivePlayback:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Voice selected. It will be used on next playback.'),
+            backgroundColor: AppTheme.accentColor,
+          ),
+        );
+        break;
+      case VoiceChangeResult.failed:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Voice change failed — using previous voice.'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+        break;
     }
   }
 
@@ -671,7 +870,7 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
                   ],
                 ),
                 const SizedBox(height: 20),
-                
+
                 // Story Illustration (Album Art Style) - Smaller
                 Center(
                   child: Container(
@@ -735,9 +934,9 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 20),
-                
+
                 // Story Title and Description - Smaller
                 Text(
                   widget.story.title,
@@ -759,17 +958,17 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
                     fontWeight: FontWeight.w400,
                   ),
                 ),
-                
+
                 const SizedBox(height: 30),
-                
+
                 // Voice Selection - Improved Layout
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: _buildVoiceSelection(),
                 ),
-                
+
                 const SizedBox(height: 15),
-                
+
                 // Control Buttons
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -781,13 +980,17 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
                         color: Colors.white.withValues(alpha: 0.1),
                       ),
                       child: IconButton(
-                        icon: const Icon(Icons.skip_previous_rounded, color: Colors.white, size: 32),
+                        icon: const Icon(
+                          Icons.skip_previous_rounded,
+                          color: Colors.white,
+                          size: 32,
+                        ),
                         onPressed: () {
                           _audioPlayer.seek(Duration.zero);
                         },
                       ),
                     ),
-                    
+
                     const SizedBox(width: 20),
 
                     // Play/Pause Button (Circular Button)
@@ -809,7 +1012,8 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
                         ),
                         child: AnimatedSwitcher(
                           duration: const Duration(milliseconds: 300),
-                          transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+                          transitionBuilder: (child, animation) =>
+                              ScaleTransition(scale: animation, child: child),
                           child: Icon(
                             _playerState == PlayerState.playing
                                 ? Icons.pause_rounded
@@ -821,7 +1025,7 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
                         ),
                       ),
                     ),
-                    
+
                     const SizedBox(width: 20),
 
                     // Next Button
@@ -831,7 +1035,11 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
                         color: Colors.white.withValues(alpha: 0.1),
                       ),
                       child: IconButton(
-                        icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 32),
+                        icon: const Icon(
+                          Icons.skip_next_rounded,
+                          color: Colors.white,
+                          size: 32,
+                        ),
                         onPressed: () {
                           _audioPlayer.seek(_duration);
                         },
@@ -839,7 +1047,7 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen> {
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 20),
               ],
             ),

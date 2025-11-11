@@ -24,6 +24,7 @@
         "image_picker",
         "intl",
         "just_audio",
+        "path",
         "path_provider",
         "permission_handler",
         "provider",
@@ -349,6 +350,11 @@
       ]
     },
     {
+      "name": "path",
+      "version": "1.9.1",
+      "dependencies": []
+    },
+    {
       "name": "path_provider",
       "version": "2.1.5",
       "dependencies": [
@@ -513,11 +519,6 @@
         "source_span",
         "string_scanner"
       ]
-    },
-    {
-      "name": "path",
-      "version": "1.9.1",
-      "dependencies": []
     },
     {
       "name": "json_annotation",

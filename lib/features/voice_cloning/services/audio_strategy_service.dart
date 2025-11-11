@@ -1,14 +1,17 @@
 import 'dart:io';
 import 'voice_cloning_service.dart';
+import 'story_emotion_mapper.dart';
 import '../../../shared/models/story.dart';
 
 /// Service to handle different audio generation strategies
 class AudioStrategyService {
-  static final AudioStrategyService _instance = AudioStrategyService._internal();
+  static final AudioStrategyService _instance =
+      AudioStrategyService._internal();
   factory AudioStrategyService() => _instance;
   AudioStrategyService._internal();
 
   final VoiceCloningService _voiceCloningService = VoiceCloningService();
+  final StoryEmotionMapper _emotionMapper = StoryEmotionMapper();
 
   /// Generate personalized audio based on story type
   Future<String> generatePersonalizedAudio({
@@ -16,8 +19,10 @@ class AudioStrategyService {
     required String userId,
     required String voiceId,
     bool preferBackgroundMusic = true,
+    String? fileName,
   }) async {
     try {
+      final preset = _emotionMapper.mapStory(story);
       // Determine the best strategy based on story content
       if (story.hasAudioContent && preferBackgroundMusic) {
         // Strategy 1: Audio + Text (with background music)
@@ -25,6 +30,8 @@ class AudioStrategyService {
           story: story,
           voiceId: voiceId,
           userId: userId,
+          preset: preset,
+          fileName: fileName,
         );
       } else {
         // Strategy 2: Text-only (voice-only generation)
@@ -32,6 +39,8 @@ class AudioStrategyService {
           story: story,
           voiceId: voiceId,
           userId: userId,
+          preset: preset,
+          fileName: fileName,
         );
       }
     } catch (e) {
@@ -44,15 +53,18 @@ class AudioStrategyService {
     required Story story,
     required String voiceId,
     required String userId,
+    required StoryEmotionPreset preset,
+    String? fileName,
   }) async {
     try {
       print('🎵 Generating audio with background music for: ${story.title}');
-      
+
       return await _voiceCloningService.generateAudioWithBackgroundMusic(
         voiceId: voiceId,
         text: story.body,
         originalAudioPath: story.audioDefaultUrl,
-        fileName: 'story_${story.id}_${userId}_with_bgm.mp3',
+        preset: preset,
+        fileName: fileName ?? 'story_${story.id}_${userId}_with_bgm.mp3',
       );
     } catch (e) {
       print('⚠️ BGM generation failed, falling back to voice-only: $e');
@@ -60,6 +72,8 @@ class AudioStrategyService {
         story: story,
         voiceId: voiceId,
         userId: userId,
+        preset: preset,
+        fileName: fileName,
       );
     }
   }
@@ -69,15 +83,17 @@ class AudioStrategyService {
     required Story story,
     required String voiceId,
     required String userId,
+    required StoryEmotionPreset preset,
+    String? fileName,
   }) async {
     try {
       print('🎤 Generating voice-only audio for: ${story.title}');
-      
+
       return await _voiceCloningService.generateAudioWithClonedVoice(
         voiceId: voiceId,
         text: story.body,
-        fileName: 'story_${story.id}_${userId}_voice_only.mp3',
-        speakingRate: 0.15, // Extremely slow speed for storytelling
+        preset: preset,
+        fileName: fileName ?? 'story_${story.id}_${userId}_voice_only.mp3',
       );
     } catch (e) {
       throw Exception('Failed to generate voice-only audio: $e');
@@ -94,7 +110,9 @@ class AudioStrategyService {
       'contentType': story.contentType,
       'audioUrl': story.audioDefaultUrl,
       'textLength': story.body.length,
-      'recommendedStrategy': story.hasAudioContent ? 'Audio + BGM' : 'Voice Only',
+      'recommendedStrategy': story.hasAudioContent
+          ? 'Audio + BGM'
+          : 'Voice Only',
     };
   }
 
@@ -103,11 +121,15 @@ class AudioStrategyService {
     try {
       final appDir = await Directory.systemTemp;
       final audioDir = Directory('${appDir.path}/personalized_audio');
-      
+
       // Check for both BGM and voice-only versions
-      final bgmFile = File('${audioDir.path}/story_${storyId}_${userId}_with_bgm.mp3');
-      final voiceOnlyFile = File('${audioDir.path}/story_${storyId}_${userId}_voice_only.mp3');
-      
+      final bgmFile = File(
+        '${audioDir.path}/story_${storyId}_${userId}_with_bgm.mp3',
+      );
+      final voiceOnlyFile = File(
+        '${audioDir.path}/story_${storyId}_${userId}_voice_only.mp3',
+      );
+
       return await bgmFile.exists() || await voiceOnlyFile.exists();
     } catch (e) {
       return false;
@@ -115,23 +137,30 @@ class AudioStrategyService {
   }
 
   /// Get existing personalized audio path
-  Future<String?> getPersonalizedAudioPath(String storyId, String userId) async {
+  Future<String?> getPersonalizedAudioPath(
+    String storyId,
+    String userId,
+  ) async {
     try {
       final appDir = await Directory.systemTemp;
       final audioDir = Directory('${appDir.path}/personalized_audio');
-      
+
       // Check for BGM version first
-      final bgmFile = File('${audioDir.path}/story_${storyId}_${userId}_with_bgm.mp3');
+      final bgmFile = File(
+        '${audioDir.path}/story_${storyId}_${userId}_with_bgm.mp3',
+      );
       if (await bgmFile.exists()) {
         return bgmFile.path;
       }
-      
+
       // Check for voice-only version
-      final voiceOnlyFile = File('${audioDir.path}/story_${storyId}_${userId}_voice_only.mp3');
+      final voiceOnlyFile = File(
+        '${audioDir.path}/story_${storyId}_${userId}_voice_only.mp3',
+      );
       if (await voiceOnlyFile.exists()) {
         return voiceOnlyFile.path;
       }
-      
+
       return null;
     } catch (e) {
       return null;
@@ -143,11 +172,11 @@ class AudioStrategyService {
     try {
       final appDir = await Directory.systemTemp;
       final audioDir = Directory('${appDir.path}/personalized_audio');
-      
+
       if (await audioDir.exists()) {
         final files = await audioDir.list().toList();
         final cutoffDate = DateTime.now().subtract(Duration(days: maxAgeDays));
-        
+
         for (final file in files) {
           if (file is File) {
             final stat = await file.stat();
@@ -168,20 +197,20 @@ class AudioStrategyService {
     try {
       final appDir = await Directory.systemTemp;
       final audioDir = Directory('${appDir.path}/personalized_audio');
-      
+
       int totalFiles = 0;
       int bgmFiles = 0;
       int voiceOnlyFiles = 0;
       int totalSizeBytes = 0;
-      
+
       if (await audioDir.exists()) {
         final files = await audioDir.list().toList();
-        
+
         for (final file in files) {
           if (file is File) {
             totalFiles++;
             totalSizeBytes += await file.length();
-            
+
             if (file.path.contains('with_bgm')) {
               bgmFiles++;
             } else if (file.path.contains('voice_only')) {
@@ -190,7 +219,7 @@ class AudioStrategyService {
           }
         }
       }
-      
+
       return {
         'totalFiles': totalFiles,
         'bgmFiles': bgmFiles,

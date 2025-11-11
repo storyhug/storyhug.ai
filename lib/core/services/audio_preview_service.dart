@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../../features/voice_cloning/services/voice_cloning_service.dart';
+import '../../features/voice_cloning/services/story_emotion_mapper.dart';
 
 /// Service to generate quick audio previews (15-30 seconds)
 class AudioPreviewService {
@@ -33,8 +34,8 @@ class AudioPreviewService {
       final audioPath = await _voiceCloningService.generateAudioWithClonedVoice(
         voiceId: effectiveVoiceId,
         text: previewText,
+        preset: const StoryEmotionPreset.neutralWarm(),
         fileName: 'preview_${DateTime.now().millisecondsSinceEpoch}.mp3',
-        speakingRate: 0.15,
       );
 
       return audioPath;
@@ -47,9 +48,9 @@ class AudioPreviewService {
   String _extractPreviewText(String fullText, int durationSeconds) {
     // Estimate words based on average speaking rate (150 words per minute)
     final targetWordCount = (durationSeconds / 60 * 150).round();
-    
+
     final words = fullText.split(' ');
-    
+
     if (words.length <= targetWordCount) {
       return fullText;
     }
@@ -63,8 +64,11 @@ class AudioPreviewService {
     final lastQuestion = preview.lastIndexOf('?');
     final lastExclamation = preview.lastIndexOf('!');
 
-    final lastSentenceEnd = [lastPeriod, lastQuestion, lastExclamation]
-        .reduce((a, b) => a > b ? a : b);
+    final lastSentenceEnd = [
+      lastPeriod,
+      lastQuestion,
+      lastExclamation,
+    ].reduce((a, b) => a > b ? a : b);
 
     if (lastSentenceEnd > preview.length * 0.7) {
       // Cut at sentence boundary if it's not too short
@@ -92,10 +96,7 @@ class AudioPreviewService {
   }) async {
     // Import mood preset service dynamically
     // For now, use standard preview
-    return await generatePreview(
-      storyText: storyText,
-      voiceId: voiceId,
-    );
+    return await generatePreview(storyText: storyText, voiceId: voiceId);
   }
 
   /// Check if preview is cached
@@ -103,18 +104,18 @@ class AudioPreviewService {
     try {
       final directory = await getApplicationDocumentsDirectory();
       final previewDir = Directory('${directory.path}/previews');
-      
+
       if (!await previewDir.exists()) {
         return null;
       }
 
       final previewFile = File('${previewDir.path}/preview_$storyId.mp3');
-      
+
       if (await previewFile.exists()) {
         // Check if file is older than 7 days
         final stat = await previewFile.stat();
         final age = DateTime.now().difference(stat.modified);
-        
+
         if (age.inDays < 7) {
           return previewFile.path;
         } else {
@@ -123,7 +124,7 @@ class AudioPreviewService {
           return null;
         }
       }
-      
+
       return null;
     } catch (e) {
       print('Error checking cached preview: $e');
@@ -136,14 +137,14 @@ class AudioPreviewService {
     try {
       final directory = await getApplicationDocumentsDirectory();
       final previewDir = Directory('${directory.path}/previews');
-      
+
       if (!await previewDir.exists()) {
         await previewDir.create(recursive: true);
       }
 
       final sourceFile = File(audioPath);
       final targetFile = File('${previewDir.path}/preview_$storyId.mp3');
-      
+
       await sourceFile.copy(targetFile.path);
     } catch (e) {
       print('Error caching preview: $e');
@@ -155,7 +156,7 @@ class AudioPreviewService {
     try {
       final directory = await getApplicationDocumentsDirectory();
       final previewDir = Directory('${directory.path}/previews');
-      
+
       if (await previewDir.exists()) {
         await previewDir.delete(recursive: true);
       }
@@ -168,7 +169,8 @@ class AudioPreviewService {
   Map<String, dynamic> getPreviewInfo({required String storyText}) {
     final previewText = _extractPreviewText(storyText, previewDurationSeconds);
     final wordCount = previewText.split(' ').length;
-    final estimatedDuration = (wordCount / 2.5).round(); // ~150 wpm = 2.5 words per second
+    final estimatedDuration = (wordCount / 2.5)
+        .round(); // ~150 wpm = 2.5 words per second
 
     return {
       'preview_text': previewText,
@@ -178,4 +180,3 @@ class AudioPreviewService {
     };
   }
 }
-
