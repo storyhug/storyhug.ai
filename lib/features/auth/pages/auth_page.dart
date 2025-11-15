@@ -24,7 +24,7 @@ class _AuthPageState extends State<AuthPage> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   String _currentSlogan = '';
-  
+
   final AuthService _authService = AuthService();
   final SloganService _sloganService = SloganService();
 
@@ -50,7 +50,7 @@ class _AuthPageState extends State<AuthPage> {
     final double gapL = Responsive.spacingLarge(context);
     final double cardWidthFactor = Responsive.cardWidthFactor(context);
     final double logoSize = Responsive.logoSize(context);
-    
+
     return Scaffold(
       resizeToAvoidBottomInset: false,
       body: StoryHugBackground(
@@ -63,9 +63,14 @@ class _AuthPageState extends State<AuthPage> {
                 builder: (context, constraints) {
                   return SingleChildScrollView(
                     physics: const NeverScrollableScrollPhysics(),
-                    padding: EdgeInsets.symmetric(horizontal: gapM, vertical: gapS),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: gapM,
+                      vertical: gapS,
+                    ),
                     child: ConstrainedBox(
-                      constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
+                      ),
                       child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -78,7 +83,9 @@ class _AuthPageState extends State<AuthPage> {
                                 width: 160,
                                 height: 160,
                                 decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(logoSize * 0.3 * 0.6),
+                                  borderRadius: BorderRadius.circular(
+                                    logoSize * 0.3 * 0.6,
+                                  ),
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.white.withOpacity(0.2),
@@ -88,7 +95,9 @@ class _AuthPageState extends State<AuthPage> {
                                   ],
                                 ),
                                 child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(logoSize * 0.3 * 0.6),
+                                  borderRadius: BorderRadius.circular(
+                                    logoSize * 0.3 * 0.6,
+                                  ),
                                   child: Image.asset(
                                     'assets/branding/storyhug_logo.png',
                                     fit: BoxFit.contain,
@@ -96,7 +105,9 @@ class _AuthPageState extends State<AuthPage> {
                                       // Fallback to icon if logo fails to load
                                       return Container(
                                         decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(logoSize * 0.3 * 0.6),
+                                          borderRadius: BorderRadius.circular(
+                                            logoSize * 0.3 * 0.6,
+                                          ),
                                           color: Colors.white.withOpacity(0.1),
                                         ),
                                         child: Icon(
@@ -115,23 +126,42 @@ class _AuthPageState extends State<AuthPage> {
                             Align(
                               alignment: Alignment.center,
                               child: ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 460),
-                                child: FractionallySizedBox(
-                                  widthFactor: 0.9,
-                                  child: ClipRRect(
+                                constraints: BoxConstraints(
+                                  maxWidth: Responsive.isDesktop(context)
+                                      ? 500
+                                      : Responsive.isTablet(context)
+                                      ? 480
+                                      : constraints.maxWidth * 0.9,
+                                ),
+                                child: ClipRRect(
                                   borderRadius: BorderRadius.circular(24),
                                   child: BackdropFilter(
-                                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                                    filter: ImageFilter.blur(
+                                      sigmaX: 20,
+                                      sigmaY: 20,
+                                    ),
                                     child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 250),
-                                      padding: EdgeInsets.all(gapM + 4),
+                                      duration: const Duration(
+                                        milliseconds: 250,
+                                      ),
+                                      padding: EdgeInsets.all(
+                                        Responsive.isDesktop(context)
+                                            ? gapM + 8
+                                            : Responsive.isTablet(context)
+                                            ? gapM + 6
+                                            : gapM + 4,
+                                      ),
                                       decoration: BoxDecoration(
                                         gradient: LinearGradient(
                                           begin: Alignment.topLeft,
                                           end: Alignment.bottomRight,
                                           colors: [
-                                            const Color(0xFF6D62D8).withOpacity(0.75),
-                                            const Color(0xFF8B7ED8).withOpacity(0.9),
+                                            const Color(
+                                              0xFF6D62D8,
+                                            ).withOpacity(0.75),
+                                            const Color(
+                                              0xFF8B7ED8,
+                                            ).withOpacity(0.9),
                                           ],
                                         ),
                                         borderRadius: BorderRadius.circular(24),
@@ -141,21 +171,29 @@ class _AuthPageState extends State<AuthPage> {
                                         ),
                                         boxShadow: [
                                           BoxShadow(
-                                            color: Colors.black.withOpacity(0.3),
+                                            color: Colors.black.withOpacity(
+                                              0.3,
+                                            ),
                                             blurRadius: 30,
                                             offset: const Offset(0, 15),
                                           ),
                                         ],
                                       ),
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
                                         children: [
                                           ClipRRect(
-                                            borderRadius: BorderRadius.circular(50),
+                                            borderRadius: BorderRadius.circular(
+                                              50,
+                                            ),
                                             child: Container(
                                               decoration: BoxDecoration(
-                                                color: Colors.white.withOpacity(0.25),
-                                                borderRadius: BorderRadius.circular(50),
+                                                color: Colors.white.withOpacity(
+                                                  0.25,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(50),
                                               ),
                                               child: Row(
                                                 children: [
@@ -163,14 +201,26 @@ class _AuthPageState extends State<AuthPage> {
                                                     child: _AuthTab(
                                                       label: 'Sign Up',
                                                       isActive: _isSignUp,
-                                                      onTap: () { if (!_isSignUp) setState(() => _isSignUp = true); },
+                                                      onTap: () {
+                                                        if (!_isSignUp)
+                                                          setState(
+                                                            () => _isSignUp =
+                                                                true,
+                                                          );
+                                                      },
                                                     ),
                                                   ),
                                                   Expanded(
                                                     child: _AuthTab(
                                                       label: 'Log In',
                                                       isActive: !_isSignUp,
-                                                      onTap: () { if (_isSignUp) setState(() => _isSignUp = false); },
+                                                      onTap: () {
+                                                        if (_isSignUp)
+                                                          setState(
+                                                            () => _isSignUp =
+                                                                false,
+                                                          );
+                                                      },
                                                     ),
                                                   ),
                                                 ],
@@ -181,18 +231,29 @@ class _AuthPageState extends State<AuthPage> {
                                           Form(
                                             key: _formKey,
                                             child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.stretch,
                                               children: [
                                                 if (_isSignUp) ...[
                                                   _FrostedTextField(
                                                     controller: _nameController,
                                                     hintText: 'Full Name',
                                                     icon: Icons.person,
-                                                    textCapitalization: TextCapitalization.words,
+                                                    textCapitalization:
+                                                        TextCapitalization
+                                                            .words,
                                                     validator: (value) {
                                                       if (_isSignUp) {
-                                                        if (value == null || value.trim().isEmpty) return 'Please enter your name';
-                                                        if (value.trim().length < 2) return 'Name must be at least 2 characters';
+                                                        if (value == null ||
+                                                            value
+                                                                .trim()
+                                                                .isEmpty)
+                                                          return 'Please enter your name';
+                                                        if (value
+                                                                .trim()
+                                                                .length <
+                                                            2)
+                                                          return 'Name must be at least 2 characters';
                                                       }
                                                       return null;
                                                     },
@@ -203,62 +264,135 @@ class _AuthPageState extends State<AuthPage> {
                                                   controller: _emailController,
                                                   hintText: 'Email Address',
                                                   icon: Icons.email,
-                                                  keyboardType: TextInputType.emailAddress,
+                                                  keyboardType: TextInputType
+                                                      .emailAddress,
                                                   validator: (value) {
-                                                    if (value == null || value.isEmpty) return 'Please enter your email';
-                                                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) return 'Please enter a valid email';
+                                                    if (value == null ||
+                                                        value.isEmpty)
+                                                      return 'Please enter your email';
+                                                    if (!RegExp(
+                                                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                                                    ).hasMatch(value))
+                                                      return 'Please enter a valid email';
                                                     return null;
                                                   },
                                                 ),
                                                 SizedBox(height: gapS + 4),
                                                 _FrostedTextField(
-                                                  controller: _passwordController,
+                                                  controller:
+                                                      _passwordController,
                                                   hintText: 'Password',
                                                   icon: Icons.lock,
                                                   obscureText: _obscurePassword,
                                                   suffix: IconButton(
-                                                    icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off, color: Colors.black54),
-                                                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                                    icon: Icon(
+                                                      _obscurePassword
+                                                          ? Icons.visibility
+                                                          : Icons
+                                                                .visibility_off,
+                                                      color: Colors.black54,
+                                                    ),
+                                                    onPressed: () => setState(
+                                                      () => _obscurePassword =
+                                                          !_obscurePassword,
+                                                    ),
                                                   ),
                                                   validator: (value) {
-                                                    if (value == null || value.isEmpty) return 'Please enter your password';
-                                                    if (_isSignUp && value.length < 6) return 'Password must be at least 6 characters';
+                                                    if (value == null ||
+                                                        value.isEmpty)
+                                                      return 'Please enter your password';
+                                                    if (_isSignUp &&
+                                                        value.length < 6)
+                                                      return 'Password must be at least 6 characters';
                                                     return null;
                                                   },
                                                 ),
                                                 if (!_isSignUp)
                                                   Align(
-                                                    alignment: Alignment.centerRight,
+                                                    alignment:
+                                                        Alignment.centerRight,
                                                     child: TextButton(
-                                                      onPressed: _handleForgotPassword,
-                                                      child: const Text('Forgot Password?', style: TextStyle(color: Colors.white70)),
+                                                      onPressed:
+                                                          _handleForgotPassword,
+                                                      child: const Text(
+                                                        'Forgot Password?',
+                                                        style: TextStyle(
+                                                          color: Colors.white70,
+                                                        ),
+                                                      ),
                                                     ),
                                                   ),
                                                 SizedBox(height: gapS),
                                                 SizedBox(
                                                   height: 56,
                                                   child: _YellowButton(
-                                                    label: _isSignUp ? 'SIGN UP' : 'LOG IN',
-                                                    onPressed: _isLoading ? null : _handleAuth,
+                                                    label: _isSignUp
+                                                        ? 'SIGN UP'
+                                                        : 'LOG IN',
+                                                    onPressed: _isLoading
+                                                        ? null
+                                                        : _handleAuth,
                                                     isLoading: _isLoading,
                                                   ),
                                                 ),
                                                 SizedBox(height: gapM - 2),
-                                                const Center(child: Text('Or continue with', style: TextStyle(color: Colors.white70))),
+                                                const Center(
+                                                  child: Text(
+                                                    'Or continue with',
+                                                    style: TextStyle(
+                                                      color: Colors.white70,
+                                                    ),
+                                                  ),
+                                                ),
                                                 SizedBox(height: gapS + 4),
                                                 Row(
                                                   children: [
-                                                    Expanded(child: _SocialButton(label: 'Google', icon: Icons.g_mobiledata, onTap: _isLoading ? null : _handleGoogleSignIn)),
+                                                    Expanded(
+                                                      child: _SocialButton(
+                                                        label: 'Google',
+                                                        icon:
+                                                            Icons.g_mobiledata,
+                                                        onTap: _isLoading
+                                                            ? null
+                                                            : _handleGoogleSignIn,
+                                                      ),
+                                                    ),
                                                     SizedBox(width: gapS + 4),
-                                                    Expanded(child: _SocialButton(label: 'Apple', icon: Icons.apple, onTap: _isLoading ? null : _handleAppleSignIn)),
+                                                    Expanded(
+                                                      child: _SocialButton(
+                                                        label: 'Apple',
+                                                        icon: Icons.apple,
+                                                        onTap: _isLoading
+                                                            ? null
+                                                            : _handleAppleSignIn,
+                                                      ),
+                                                    ),
                                                   ],
                                                 ),
                                                 SizedBox(height: gapS + 4),
                                                 Row(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
                                                   children: [
-                                                    Text(_isSignUp ? 'Already have an account? ' : 'Don\'t have an account? ', style: const TextStyle(color: Colors.white70)),
-                                                    TextButton(onPressed: () => setState(() => _isSignUp = !_isSignUp), child: Text(_isSignUp ? 'Log In' : 'Sign Up')),
+                                                    Text(
+                                                      _isSignUp
+                                                          ? 'Already have an account? '
+                                                          : 'Don\'t have an account? ',
+                                                      style: const TextStyle(
+                                                        color: Colors.white70,
+                                                      ),
+                                                    ),
+                                                    TextButton(
+                                                      onPressed: () => setState(
+                                                        () => _isSignUp =
+                                                            !_isSignUp,
+                                                      ),
+                                                      child: Text(
+                                                        _isSignUp
+                                                            ? 'Log In'
+                                                            : 'Sign Up',
+                                                      ),
+                                                    ),
                                                   ],
                                                 ),
                                                 if (_isSignUp) ...[
@@ -266,13 +400,50 @@ class _AuthPageState extends State<AuthPage> {
                                                   RichText(
                                                     textAlign: TextAlign.center,
                                                     text: TextSpan(
-                                                      style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                                      style: const TextStyle(
+                                                        color: Colors.white70,
+                                                        fontSize: 11,
+                                                      ),
                                                       children: [
-                                                        const TextSpan(text: 'By signing up, you agree to our '),
-                                                        TextSpan(text: 'Terms', style: const TextStyle(decoration: TextDecoration.underline, color: Color(0xFF4EA3FF)), recognizer: TapGestureRecognizer()..onTap = () {}),
-                                                        const TextSpan(text: ' & '),
-                                                        TextSpan(text: 'Privacy Policy', style: const TextStyle(decoration: TextDecoration.underline, color: Color(0xFF4EA3FF)), recognizer: TapGestureRecognizer()..onTap = () {}),
-                                                        const TextSpan(text: '.'),
+                                                        const TextSpan(
+                                                          text:
+                                                              'By signing up, you agree to our ',
+                                                        ),
+                                                        TextSpan(
+                                                          text: 'Terms',
+                                                          style: const TextStyle(
+                                                            decoration:
+                                                                TextDecoration
+                                                                    .underline,
+                                                            color: Color(
+                                                              0xFF4EA3FF,
+                                                            ),
+                                                          ),
+                                                          recognizer:
+                                                              TapGestureRecognizer()
+                                                                ..onTap = () {},
+                                                        ),
+                                                        const TextSpan(
+                                                          text: ' & ',
+                                                        ),
+                                                        TextSpan(
+                                                          text:
+                                                              'Privacy Policy',
+                                                          style: const TextStyle(
+                                                            decoration:
+                                                                TextDecoration
+                                                                    .underline,
+                                                            color: Color(
+                                                              0xFF4EA3FF,
+                                                            ),
+                                                          ),
+                                                          recognizer:
+                                                              TapGestureRecognizer()
+                                                                ..onTap = () {},
+                                                        ),
+                                                        const TextSpan(
+                                                          text: '.',
+                                                        ),
                                                       ],
                                                     ),
                                                   ),
@@ -281,10 +452,9 @@ class _AuthPageState extends State<AuthPage> {
                                             ),
                                           ),
                                         ],
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ),
                                 ),
                               ),
                             ),
@@ -316,20 +486,29 @@ class _AuthPageState extends State<AuthPage> {
       setState(() {
         _isLoading = true;
       });
-      
+
       try {
         if (_isSignUp) {
-          await _authService.signUp(_emailController.text, _passwordController.text, _nameController.text.trim());
+          await _authService.signUp(
+            _emailController.text,
+            _passwordController.text,
+            _nameController.text.trim(),
+          );
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Account created! Please check your email to verify.'),
+                content: Text(
+                  'Account created! Please check your email to verify.',
+                ),
                 backgroundColor: AppTheme.successColor,
               ),
             );
           }
         } else {
-          await _authService.signIn(_emailController.text, _passwordController.text);
+          await _authService.signIn(
+            _emailController.text,
+            _passwordController.text,
+          );
           if (mounted) {
             context.go('/home');
           }
@@ -352,12 +531,12 @@ class _AuthPageState extends State<AuthPage> {
       }
     }
   }
-  
+
   Future<void> _handleGoogleSignIn() async {
     setState(() {
       _isLoading = true;
     });
-    
+
     try {
       await _authService.signInWithGoogle();
       if (mounted) {
@@ -380,12 +559,12 @@ class _AuthPageState extends State<AuthPage> {
       }
     }
   }
-  
+
   Future<void> _handleAppleSignIn() async {
     setState(() {
       _isLoading = true;
     });
-    
+
     try {
       await _authService.signInWithApple();
       if (mounted) {
@@ -408,7 +587,7 @@ class _AuthPageState extends State<AuthPage> {
       }
     }
   }
-  
+
   Future<void> _handleForgotPassword() async {
     if (_emailController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -419,7 +598,7 @@ class _AuthPageState extends State<AuthPage> {
       );
       return;
     }
-    
+
     try {
       await _authService.resetPassword(_emailController.text);
       if (mounted) {
@@ -455,11 +634,7 @@ class _AuthPageState extends State<AuthPage> {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.auto_awesome,
-            color: Colors.amber,
-            size: 20,
-          ),
+          Icon(Icons.auto_awesome, color: Colors.amber, size: 20),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -474,11 +649,7 @@ class _AuthPageState extends State<AuthPage> {
             ),
           ),
           const SizedBox(width: 12),
-          Icon(
-            Icons.auto_awesome,
-            color: Colors.amber,
-            size: 20,
-          ),
+          Icon(Icons.auto_awesome, color: Colors.amber, size: 20),
         ],
       ),
     );
@@ -489,7 +660,11 @@ class _AuthTab extends StatelessWidget {
   final String label;
   final bool isActive;
   final VoidCallback onTap;
-  const _AuthTab({required this.label, required this.isActive, required this.onTap});
+  const _AuthTab({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -585,7 +760,10 @@ class _FrostedTextField extends StatelessWidget {
           ),
           prefixIcon: Icon(icon, color: Colors.black45),
           suffixIcon: suffix,
-          contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: 16,
+            horizontal: 12,
+          ),
         ),
       ),
     );
@@ -596,19 +774,27 @@ class _YellowButton extends StatefulWidget {
   final String label;
   final VoidCallback? onPressed;
   final bool isLoading;
-  const _YellowButton({required this.label, required this.onPressed, required this.isLoading});
+  const _YellowButton({
+    required this.label,
+    required this.onPressed,
+    required this.isLoading,
+  });
 
   @override
   State<_YellowButton> createState() => _YellowButtonState();
 }
 
-class _YellowButtonState extends State<_YellowButton> with SingleTickerProviderStateMixin {
+class _YellowButtonState extends State<_YellowButton>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 150));
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+    );
   }
 
   @override
@@ -634,13 +820,25 @@ class _YellowButtonState extends State<_YellowButton> with SingleTickerProviderS
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFFD85A),
                 foregroundColor: Colors.black87,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
                 elevation: 6,
                 shadowColor: const Color(0xFFFFD85A).withOpacity(0.6),
               ),
               child: widget.isLoading
-                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black87))
-                  : Text(widget.label, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.black87,
+                      ),
+                    )
+                  : Text(
+                      widget.label,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
             ),
           );
         },
@@ -653,7 +851,11 @@ class _SocialButton extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback? onTap;
-  const _SocialButton({required this.label, required this.icon, required this.onTap});
+  const _SocialButton({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -670,4 +872,3 @@ class _SocialButton extends StatelessWidget {
     );
   }
 }
-

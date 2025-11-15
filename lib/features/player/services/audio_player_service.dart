@@ -9,7 +9,9 @@ import '../../voice_cloning/services/voice_cloning_service.dart';
 import '../../voice_cloning/services/audio_strategy_service.dart';
 import '../../voice_cloning/services/voice_change_event.dart';
 import '../../stories/services/story_service.dart';
+import '../../../core/services/supabase_service.dart';
 import 'voice_generation_worker.dart';
+import 'listen_cache_service.dart';
 
 enum VoiceChangeResult { success, noActivePlayback, failed }
 
@@ -60,6 +62,11 @@ class AudioPlayerService {
   bool _isChangingVoice = false;
   bool _hasFreshPlayer = false;
 
+  // Listen tracking
+  DateTime? _playbackStartTime;
+  Duration _totalListeningDuration = Duration.zero;
+  bool _hasRecordedListen = false;
+
   // Getters
   PlayerState get playerState => _playerState;
   Duration get duration => _duration;
@@ -83,9 +90,241 @@ class AudioPlayerService {
   }
 
   void _setPlayerState(PlayerState state) {
+    final previousState = _playerState;
     _playerState = state;
     if (!_playerStateController.isClosed) {
       _playerStateController.add(state);
+    }
+
+    // Track listening duration and record listens
+    _handlePlayerStateChange(previousState, state);
+  }
+
+  void _handlePlayerStateChange(
+    PlayerState previousState,
+    PlayerState newState,
+  ) {
+    print('[LISTEN] State change: $previousState → $newState');
+    print(
+      '[LISTEN] Active context: storyId=$_activeStoryId, userId=$_activeUserId',
+    );
+
+    // Start tracking when playback begins
+    if (newState == PlayerState.playing &&
+        previousState != PlayerState.playing) {
+      print('[LISTEN] ✅ Playback started - initializing tracking');
+      print(
+        '[LISTEN]   Context check: storyId=$_activeStoryId, userId=$_activeUserId',
+      );
+      _playbackStartTime = DateTime.now();
+      _recordListenStart();
+    }
+
+    // Update duration when paused
+    if (previousState == PlayerState.playing &&
+        newState == PlayerState.paused) {
+      print('[LISTEN] Paused - saving partial duration');
+      _updateListeningDuration();
+      _recordListenPartial();
+    }
+
+    // Update duration when stopped
+    if (previousState == PlayerState.playing &&
+        newState == PlayerState.stopped) {
+      print('[LISTEN] Stopped - saving final duration');
+      _updateListeningDuration();
+      _recordListenComplete();
+    }
+
+    // Record completion when story finishes
+    if (newState == PlayerState.completed) {
+      print('[LISTEN] Completed - saving final duration');
+      _updateListeningDuration();
+      _recordListenComplete();
+    }
+
+    // Restart timer when resuming from paused
+    if (newState == PlayerState.playing &&
+        previousState == PlayerState.paused) {
+      print('[LISTEN] Resuming from pause - restarting timer');
+      _playbackStartTime = DateTime.now();
+    }
+  }
+
+  void _updateListeningDuration() {
+    if (_playbackStartTime != null) {
+      final elapsed = DateTime.now().difference(_playbackStartTime!);
+      _totalListeningDuration += elapsed;
+      print(
+        '[LISTEN] Update duration: +${elapsed.inSeconds}s, total=${_totalListeningDuration.inSeconds}s',
+      );
+      _playbackStartTime = null;
+    }
+  }
+
+  Future<void> _recordListenPartial() async {
+    if (_activeStoryId == null || _activeUserId == null) {
+      return;
+    }
+
+    try {
+      final durationSeconds = _totalListeningDuration.inSeconds;
+      if (durationSeconds <= 0) return;
+
+      print(
+        '[LISTEN] Save partial: storyId=$_activeStoryId, duration=${durationSeconds}s',
+      );
+      await _recordListenEvent(
+        storyId: _activeStoryId!,
+        userId: _activeUserId!,
+        listenDuration: _totalListeningDuration,
+        completed: false,
+      );
+    } catch (e) {
+      print('[LISTEN] Save partial ERROR: $e');
+    }
+  }
+
+  Future<void> _recordListenStart() async {
+    if (_activeStoryId == null || _activeUserId == null || _hasRecordedListen) {
+      print(
+        '[LISTEN] Start skipped: storyId=$_activeStoryId, userId=$_activeUserId, hasRecorded=$_hasRecordedListen',
+      );
+      return;
+    }
+
+    try {
+      print('[LISTEN] Start: storyId=$_activeStoryId, userId=$_activeUserId');
+      // Record initial listen when playback starts
+      await _storyService.recordListen(_activeStoryId!);
+      _hasRecordedListen = true;
+      print('[LISTEN] Start saved successfully');
+    } catch (e) {
+      print('[LISTEN] Start ERROR: $e');
+      debugPrint('Stack trace: ${StackTrace.current}');
+    }
+  }
+
+  Future<void> _recordListenComplete() async {
+    if (_activeStoryId == null || _activeUserId == null) {
+      print(
+        '[LISTEN] Complete skipped: storyId=$_activeStoryId, userId=$_activeUserId',
+      );
+      return;
+    }
+
+    try {
+      _updateListeningDuration();
+      final durationSeconds = _totalListeningDuration.inSeconds;
+
+      if (durationSeconds <= 0) {
+        print('[LISTEN] Complete skipped: duration is 0');
+        return;
+      }
+
+      // Check if story was completed (90% of total duration)
+      final completed =
+          _duration.inSeconds > 0 &&
+          (durationSeconds >= _duration.inSeconds * 0.9);
+
+      print(
+        '[LISTEN] Save final: storyId=$_activeStoryId, duration=${durationSeconds}s, completed=$completed, totalDuration=${_duration.inSeconds}s',
+      );
+
+      // Record listen with duration and completion status using direct Supabase write
+      await _recordListenEvent(
+        storyId: _activeStoryId!,
+        userId: _activeUserId!,
+        listenDuration: _totalListeningDuration,
+        completed: completed,
+      );
+
+      print(
+        '[LISTEN] Completed: true=$completed, duration=${durationSeconds}s',
+      );
+
+      // Reset tracking
+      _totalListeningDuration = Duration.zero;
+      _hasRecordedListen = false;
+    } catch (e) {
+      print('[LISTEN] Complete ERROR: $e');
+      debugPrint('Stack trace: ${StackTrace.current}');
+    }
+  }
+
+  /// Direct Supabase write for reliable listen recording with local cache fallback
+  Future<void> _recordListenEvent({
+    required String storyId,
+    required String userId,
+    required Duration listenDuration,
+    required bool completed,
+  }) async {
+    final listenedAt = DateTime.now().toIso8601String();
+
+    try {
+      print(
+        '[LISTEN] Writing to Supabase: storyId=$storyId, userId=$userId, duration=${listenDuration.inSeconds}s, completed=$completed',
+      );
+
+      // Validate inputs
+      if (storyId.isEmpty) {
+        print('[LISTEN] ERROR: storyId is empty, cannot save listen');
+        return;
+      }
+
+      if (userId.isEmpty) {
+        print('[LISTEN] ERROR: userId is empty, cannot save listen');
+        return;
+      }
+
+      // Try Supabase write first
+      try {
+        final response = await SupabaseService.client.from('listens').insert({
+          'story_id': storyId,
+          'user_id': userId,
+          'duration_seconds': listenDuration.inSeconds,
+          'completed': completed,
+          'listened_at': listenedAt,
+        }).select();
+
+        print('[LISTEN] Supabase response: $response');
+        print(
+          '📌 Listen saved successfully - ID: ${response is List && response.isNotEmpty ? response[0]['id'] : 'unknown'}',
+        );
+
+        // Success - no need to cache
+        return;
+      } catch (supabaseError) {
+        print('[LISTEN] Supabase write ERROR: $supabaseError');
+
+        // Fallback: Cache locally for later sync
+        print('[LISTEN] Caching listen locally for later sync...');
+        await ListenCacheService.cacheListen(
+          storyId: storyId,
+          userId: userId,
+          durationSeconds: listenDuration.inSeconds,
+          completed: completed,
+          listenedAt: listenedAt,
+        );
+        print('[LISTEN] ✅ Listen cached locally - will sync later');
+      }
+    } catch (e) {
+      print('[LISTEN] ERROR in _recordListenEvent: $e');
+      debugPrint('Stack trace: ${StackTrace.current}');
+
+      // Last resort: Try to cache even if everything fails
+      try {
+        await ListenCacheService.cacheListen(
+          storyId: storyId,
+          userId: userId,
+          durationSeconds: listenDuration.inSeconds,
+          completed: completed,
+          listenedAt: listenedAt,
+        );
+        print('[LISTEN] ✅ Listen cached as fallback');
+      } catch (cacheError) {
+        print('[LISTEN] ❌ Failed to cache listen: $cacheError');
+      }
     }
   }
 
@@ -127,6 +366,13 @@ class AudioPlayerService {
     _positionSubscription = _audioPlayer!.onPositionChanged.listen((position) {
       _position = position;
       _emitPosition(position);
+    });
+
+    // Listen for completion to record finished listens
+    _audioPlayer!.onPlayerComplete.listen((_) {
+      print('🎵 Playback completed');
+      _recordListenComplete();
+      _setPlayerState(PlayerState.completed);
     });
   }
 
@@ -183,6 +429,12 @@ class AudioPlayerService {
   }
 
   Future<void> _stopCurrentPlayback({bool release = false}) async {
+    // Record listen before stopping
+    if (_playerState == PlayerState.playing ||
+        _playerState == PlayerState.paused) {
+      _recordListenComplete();
+    }
+
     _cleanupListeners();
     if (_audioPlayer != null) {
       try {
@@ -293,26 +545,43 @@ class AudioPlayerService {
         ? UrlSource(audioUrl)
         : DeviceFileSource(audioUrl);
 
-    final playingFuture = _audioPlayer!.onPlayerStateChanged
-        .firstWhere((state) => state == PlayerState.playing)
-        .timeout(
-          const Duration(seconds: 2),
-          onTimeout: () => PlayerState.stopped,
-        );
-
     await _audioPlayer!.play(source);
     print('[VOICE] play() invoked successfully');
 
-    final state = await playingFuture;
-    if (state != PlayerState.playing) {
-      print('⚠️ Auto-start timeout — forcing resume()');
+    // Wait for playback to start automatically
+    final playingFuture = _audioPlayer!.onPlayerStateChanged
+        .firstWhere((state) => state == PlayerState.playing)
+        .timeout(
+          const Duration(seconds: 3),
+          onTimeout: () {
+            print('⚠️ Auto-start timeout — will force resume');
+            return PlayerState.stopped;
+          },
+        );
+
+    try {
+      final state = await playingFuture;
+      if (state == PlayerState.playing) {
+        print('[VOICE] ✅ Playback started automatically');
+      }
+    } catch (e) {
+      print('[VOICE] ⚠️ Waiting for playback: $e');
+    }
+
+    // Force resume if not playing after timeout
+    if (_playerState != PlayerState.playing) {
+      print('⚠️ Auto-start failed — forcing resume()');
       await _audioPlayer!.resume();
+      _setPlayerState(PlayerState.playing);
     }
 
     _currentUrl = audioUrl;
     _isParentVoice = isParentVoice;
-    _setPlayerState(PlayerState.playing);
     _hasFreshPlayer = false;
+
+    // Reset listen tracking for new playback
+    _totalListeningDuration = Duration.zero;
+    _hasRecordedListen = false;
 
     final elapsed = DateTime.now().difference(playbackStart);
     print('[VOICE] Playback start latency: ${elapsed.inMilliseconds}ms');
@@ -338,6 +607,19 @@ class AudioPlayerService {
   }
 
   void _resetActiveContext() {
+    print('[LISTEN] _resetActiveContext called');
+    print('[LISTEN]   Current state: $_playerState');
+    print(
+      '[LISTEN]   Current context: storyId=$_activeStoryId, userId=$_activeUserId',
+    );
+
+    // Record listen before resetting if we were playing
+    if (_playerState == PlayerState.playing ||
+        _playerState == PlayerState.paused) {
+      print('[LISTEN] Recording final listen before reset');
+      _recordListenComplete();
+    }
+
     _activeStory = null;
     _activeStoryId = null;
     _activeUserId = null;
@@ -345,6 +627,11 @@ class AudioPlayerService {
     _activeVoiceType = null;
     _activeOriginalUrl = null;
     _activePreferBackgroundMusic = true;
+    _playbackStartTime = null;
+    _totalListeningDuration = Duration.zero;
+    _hasRecordedListen = false;
+
+    print('[LISTEN] Context reset complete');
   }
 
   Future<void> play(
@@ -359,6 +646,31 @@ class AudioPlayerService {
     try {
       print('🎵 Starting to play audio: $url');
       print('🎵 Current player state: $_playerState');
+      print(
+        '🎵 Play params: userId=$userId, storyId=$storyId, story=${story?.id}',
+      );
+
+      // Set active context FIRST before any state changes
+      bool isTextOnlyStory =
+          url.isEmpty || url == 'null' || !url.startsWith('http');
+
+      if (story != null) {
+        _activeStory = story;
+        _activeStoryId = story.id;
+        print('🎵 Set activeStoryId from story: ${story.id}');
+      } else if (storyId != null) {
+        _activeStoryId = storyId;
+        print('🎵 Set activeStoryId from storyId param: $storyId');
+      }
+
+      _activeOriginalUrl = url;
+      _activeUserId = userId;
+      _activeVoiceType = voiceType;
+      _activePreferBackgroundMusic = !isTextOnlyStory;
+
+      print(
+        '🎵 Active context set: storyId=$_activeStoryId, userId=$_activeUserId',
+      );
 
       // Only ensure clean state if we're switching to a different URL or if no player exists
       if (_currentUrl != url || _audioPlayer == null) {
@@ -367,21 +679,10 @@ class AudioPlayerService {
 
       _currentUrl = url;
       _isParentVoice = isParentVoice;
-      _resetActiveContext();
 
-      bool isTextOnlyStory =
-          url.isEmpty || url == 'null' || !url.startsWith('http');
-
-      if (story != null) {
-        _activeStory = story;
-        _activeStoryId = story.id;
-      } else if (storyId != null) {
-        _activeStoryId = storyId;
-      }
-      _activeOriginalUrl = url;
-      _activeUserId = userId;
-      _activeVoiceType = voiceType;
-      _activePreferBackgroundMusic = !isTextOnlyStory;
+      // Reset tracking flags for new playback (but keep storyId/userId)
+      _totalListeningDuration = Duration.zero;
+      _hasRecordedListen = false;
 
       String audioUrl = url;
 
@@ -529,6 +830,9 @@ class AudioPlayerService {
     try {
       if (_audioPlayer != null) {
         await _audioPlayer!.resume();
+        // Restart duration timer when resuming
+        _playbackStartTime = DateTime.now();
+        print('[LISTEN] Resumed - restarting timer');
         _setPlayerState(PlayerState.playing);
       }
     } catch (e) {
@@ -540,17 +844,28 @@ class AudioPlayerService {
     try {
       print('🛑 Stopping audio player...');
 
+      // Record listen before stopping
+      if (_playerState == PlayerState.playing ||
+          _playerState == PlayerState.paused) {
+        _recordListenComplete();
+      }
+
       // Clean up listeners first
       _cleanupListeners();
 
       // Stop the audio player
-      await _audioPlayer!.stop();
+      if (_audioPlayer != null) {
+        await _audioPlayer!.stop();
+      }
 
       // Reset all state
       _setPlayerState(PlayerState.stopped);
       _position = Duration.zero;
       _duration = Duration.zero;
       _currentUrl = null;
+      _playbackStartTime = null;
+      _totalListeningDuration = Duration.zero;
+      _hasRecordedListen = false;
       _emitPosition(_position);
       _emitDuration(_duration);
 
@@ -733,9 +1048,19 @@ class AudioPlayerService {
       await _audioPlayer?.seek(Duration.zero);
       _position = Duration.zero;
       _emitPosition(_position);
+
+      // Ensure playback is actually playing after voice change
+      // Wait a bit for the player to settle
+      await Future.delayed(const Duration(milliseconds: 300));
+
       if (_playerState != PlayerState.playing) {
+        print(
+          '[VOICE] ⚠️ Player not playing after voice change, forcing resume',
+        );
         await _audioPlayer?.resume();
         _setPlayerState(PlayerState.playing);
+      } else {
+        print('[VOICE] ✅ Playback resumed automatically with new voice');
       }
 
       final elapsed = regenStopwatch.elapsed;

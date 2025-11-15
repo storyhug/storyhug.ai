@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../shared/responsive.dart';
 
 class AppTheme {
   // StoryHug.ai Magic Night-Sky Theme (from loginin.png)
@@ -9,18 +10,18 @@ class AppTheme {
   static const Color accentColor = Color(0xFFFFD85A); // Yellow accent
   static const Color textColor = Color(0xFFFFFFFF); // White
   static const Color backgroundColor = Color(0xFF87CEEB); // Light blue
-  
+
   // Magic Night-Sky Gradient Colors (from loginin.png)
   static const Color gradientTop = Color(0xFF5D5CFD); // Deep twilight blue
   static const Color gradientBottom = Color(0xFFFAD6C4); // Soft peach
-  
+
   // Glass morphism colors
   static const Color glassCard = Color(0xFF6D62D8); // Translucent purple
   static const Color cardColor = Color(0xFF6D62D8); // Glass card color
   static const Color dividerColor = Color(0xFF404040);
   static const Color errorColor = Color(0xFFFF5252);
   static const Color successColor = Color(0xFF4CAF50);
-  
+
   static ThemeData get darkTheme {
     return ThemeData(
       brightness: Brightness.dark,
@@ -128,7 +129,9 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: cardColor,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24), // Increased from 12 to 24 for softer look
+          borderRadius: BorderRadius.circular(
+            24,
+          ), // Increased from 12 to 24 for softer look
         ),
         elevation: 0, // Using shadows from decoration instead
         margin: const EdgeInsets.all(8),
@@ -160,16 +163,13 @@ class AppTheme {
         ),
         labelStyle: GoogleFonts.poppins(color: const Color(0xFFA9A9A9)),
         hintStyle: GoogleFonts.poppins(color: const Color(0xFFA9A9A9)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
       ),
-      dividerTheme: const DividerThemeData(
-        color: dividerColor,
-        thickness: 1,
-      ),
-      iconTheme: const IconThemeData(
-        color: textColor,
-        size: 24,
-      ),
+      dividerTheme: const DividerThemeData(color: dividerColor, thickness: 1),
+      iconTheme: const IconThemeData(color: textColor, size: 24),
       // Rounded icon style
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
@@ -181,14 +181,14 @@ class AppTheme {
       ),
     );
   }
-  
+
   // Magic Night-Sky Gradient Background (from loginin.png)
   static const LinearGradient backgroundGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
     colors: [gradientTop, gradientBottom],
   );
-  
+
   // Glass card gradient
   static const LinearGradient cardGradient = LinearGradient(
     begin: Alignment.topLeft,
@@ -198,15 +198,12 @@ class AppTheme {
       Color(0xFF8B7ED8), // Lighter purple
     ],
   );
-  
+
   // Glass morphism decoration for cards
   static BoxDecoration glassCardDecoration = BoxDecoration(
     gradient: cardGradient,
     borderRadius: BorderRadius.circular(24),
-    border: Border.all(
-      color: Colors.white.withOpacity(0.2),
-      width: 1.5,
-    ),
+    border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
     boxShadow: [
       BoxShadow(
         color: Colors.black.withOpacity(0.3),
@@ -215,4 +212,33 @@ class AppTheme {
       ),
     ],
   );
+
+  // Responsive theme helpers
+  static double getResponsivePadding(BuildContext context) =>
+      Responsive.isDesktop(context)
+      ? 32
+      : Responsive.isTablet(context)
+      ? 24
+      : 16;
+
+  static double getResponsiveHorizontalPadding(BuildContext context) =>
+      Responsive.isDesktop(context)
+      ? 64
+      : Responsive.isTablet(context)
+      ? 32
+      : 16;
+
+  static double getResponsiveVerticalPadding(BuildContext context) =>
+      Responsive.isDesktop(context)
+      ? 32
+      : Responsive.isTablet(context)
+      ? 24
+      : 16;
+
+  static double getResponsiveFontSize(
+    BuildContext context,
+    double mobile,
+    double tablet,
+    double desktop,
+  ) => Responsive.responsiveFontSize(context, mobile, tablet, desktop);
 }

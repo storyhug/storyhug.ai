@@ -6,6 +6,9 @@ import '../../subscription/services/subscription_service.dart';
 import '../../voice_cloning/services/voice_cloning_service.dart';
 import '../../../shared/models/user_voice.dart';
 import '../../../shared/widgets/storyhug_background.dart';
+import '../../../shared/responsive.dart';
+import '../services/dashboard_analytics_service.dart';
+import '../models/dashboard_stats.dart';
 
 class ParentalDashboardPage extends StatefulWidget {
   const ParentalDashboardPage({super.key});
@@ -17,12 +20,15 @@ class ParentalDashboardPage extends StatefulWidget {
 class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
   final SubscriptionService _subscriptionService = SubscriptionService();
   final VoiceCloningService _voiceCloningService = VoiceCloningService();
-  
+  final DashboardAnalyticsService _analyticsService =
+      DashboardAnalyticsService();
+
   bool _isLoading = true;
   int _totalStoriesListened = 0;
   int _totalListeningTime = 0; // in minutes
   String _mostPopularCategory = 'Moral Stories';
-  List<Map<String, dynamic>> _recentActivity = [];
+  int _activeChildren = 0;
+  List<RecentActivity> _recentActivity = [];
   List<UserVoice> _userVoices = [];
   bool _isLoadingVoices = false;
 
@@ -33,40 +39,45 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
     _loadUserVoices();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh dashboard when returning to this page
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      print('[DASHBOARD] Page visible - refreshing data');
+      _loadDashboardData();
+    });
+  }
+
   Future<void> _loadDashboardData() async {
     try {
-      // TODO: Load real data from Supabase
-      // For now, use sample data
+      print('[DASHBOARD] Fetch stats started');
       setState(() {
-        _totalStoriesListened = 47;
-        _totalListeningTime = 235; // 3 hours 55 minutes
-        _mostPopularCategory = 'Moral Stories';
-        _recentActivity = [
-          {
-            'child': 'Emma',
-            'story': 'The Brave Little Rabbit',
-            'duration': 5,
-            'completed': true,
-            'timestamp': DateTime.now().subtract(const Duration(hours: 2)),
-          },
-          {
-            'child': 'Liam',
-            'story': 'Rama\'s Courage',
-            'duration': 7,
-            'completed': true,
-            'timestamp': DateTime.now().subtract(const Duration(hours: 4)),
-          },
-          {
-            'child': 'Emma',
-            'story': 'The Magic Forest Adventure',
-            'duration': 6,
-            'completed': false,
-            'timestamp': DateTime.now().subtract(const Duration(days: 1)),
-          },
-        ];
+        _isLoading = true;
+      });
+
+      final stats = await _analyticsService.getDashboardStats();
+
+      print('[DASHBOARD] Fetch stats completed');
+      print(
+        '[DASHBOARD] Stories: ${stats.totalStoriesListened}, Listening: ${stats.totalListeningTimeMinutes}m, Activity count: ${stats.recentActivities.length}',
+      );
+
+      setState(() {
+        _totalStoriesListened = stats.totalStoriesListened;
+        _totalListeningTime = stats.totalListeningTimeMinutes;
+        _mostPopularCategory =
+            stats.favoriteCategory.isNotEmpty &&
+                stats.favoriteCategory != 'None'
+            ? stats.favoriteCategory
+            : 'Moral Stories';
+        _activeChildren = stats.activeChildren;
+        _recentActivity = stats.recentActivities;
         _isLoading = false;
       });
     } catch (e) {
+      print('[DASHBOARD] Fetch stats ERROR: $e');
+      debugPrint('Stack trace: ${StackTrace.current}');
       setState(() {
         _isLoading = false;
       });
@@ -78,7 +89,7 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
       setState(() {
         _isLoadingVoices = true;
       });
-      
+
       final userId = SupabaseService.client.auth.currentUser?.id;
       if (userId != null) {
         final voices = await _voiceCloningService.getUserVoices(userId);
@@ -101,10 +112,7 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
       appBar: AppBar(
         title: const Text(
           'Parental Dashboard',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -119,6 +127,7 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: () async {
+              print('[DASHBOARD] Manual refresh triggered');
               setState(() {
                 _isLoading = true;
               });
@@ -133,38 +142,67 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
         animateStars: false,
         child: SafeArea(
           child: _isLoading
-              ? const Center(child: CircularProgressIndicator(color: Colors.white))
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24.0, 24.0, 24.0, 100.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header
-                      _buildHeader(),
-                      const SizedBox(height: 32),
+              ? const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                )
+              : Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 650),
+                    child: Padding(
+                      padding: Responsive.responsiveHorizontalPadding(context),
+                      child: RefreshIndicator(
+                        onRefresh: () async {
+                          print('[DASHBOARD] Pull-to-refresh triggered');
+                          await _loadDashboardData();
+                        },
+                        color: AppTheme.accentColor,
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Header
+                              _buildHeader(),
+                              SizedBox(
+                                height: Responsive.spacingLarge(context),
+                              ),
 
-                      // Stats Cards
-                      _buildStatsCards(),
-                      const SizedBox(height: 32),
+                              // Stats Cards
+                              _buildStatsCards(),
+                              SizedBox(
+                                height: Responsive.spacingLarge(context),
+                              ),
 
-                      // Subscription Status
-                      _buildSubscriptionStatus(),
-                      const SizedBox(height: 32),
+                              // Subscription Status
+                              _buildSubscriptionStatus(),
+                              SizedBox(
+                                height: Responsive.spacingLarge(context),
+                              ),
 
-                      // Recent Activity
-                      _buildRecentActivity(),
-                      const SizedBox(height: 32),
+                              // Recent Activity
+                              _buildRecentActivity(),
+                              SizedBox(
+                                height: Responsive.spacingLarge(context),
+                              ),
 
-                      // Voice Management
-                      if (_userVoices.isNotEmpty) ...[
-                        _buildVoiceManagement(),
-                        const SizedBox(height: 32),
-                      ],
+                              // Voice Management
+                              if (_userVoices.isNotEmpty) ...[
+                                _buildVoiceManagement(),
+                                SizedBox(
+                                  height: Responsive.spacingLarge(context),
+                                ),
+                              ],
 
-                      // Quick Actions
-                      _buildQuickActions(),
-                      const SizedBox(height: 50),
-                    ],
+                              // Quick Actions
+                              _buildQuickActions(),
+                              SizedBox(
+                                height: Responsive.spacingLarge(context),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
         ),
@@ -178,61 +216,73 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Colors.white.withValues(alpha: 0.1),
-            Colors.white.withValues(alpha: 0.05),
+            AppTheme.accentColor.withValues(alpha: 0.25),
+            AppTheme.accentColor.withValues(alpha: 0.15),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.2),
-          width: 1,
+          color: AppTheme.accentColor.withValues(alpha: 0.4),
+          width: 2,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.accentColor.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.accentColor.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.dashboard,
-                  color: AppTheme.accentColor,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Parental Dashboard',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.accentColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.dashboard,
+              color: AppTheme.accentColor,
+              size: Responsive.isDesktop(context) ? 28 : 24,
+            ),
+          ),
+          SizedBox(width: Responsive.spacingMedium(context)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Parental Dashboard',
+                  style: TextStyle(
+                    fontSize: Responsive.responsiveFontSize(
+                      context,
+                      20,
+                      22,
+                      24,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Track your child\'s story journey and manage their experience',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withValues(alpha: 0.8),
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
-            ],
+                SizedBox(height: Responsive.spacingSmall(context) / 2),
+                Text(
+                  'Track your child\'s story journey and manage their experience',
+                  style: TextStyle(
+                    fontSize: Responsive.responsiveFontSize(
+                      context,
+                      13,
+                      14,
+                      15,
+                    ),
+                    color: Colors.white.withValues(alpha: 0.8),
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -240,52 +290,51 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
   }
 
   Widget _buildStatsCards() {
-    return Column(
-      children: [
-        Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final crossAxisCount = Responsive.gridCrossAxisCount(
+          context,
+          mobile: 1,
+          tablet: 2,
+          desktop: 2,
+        );
+
+        return GridView.count(
+          crossAxisCount: crossAxisCount,
+          crossAxisSpacing: Responsive.spacingMedium(context),
+          mainAxisSpacing: Responsive.spacingMedium(context),
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: Responsive.isMobile(context) ? 1.8 : 1.6,
           children: [
-            Expanded(
-              child: _buildStatCard(
-                title: 'Stories Listened',
-                value: _totalStoriesListened.toString(),
-                icon: Icons.book,
-                color: AppTheme.primaryColor,
-              ),
+            _buildStatCard(
+              title: 'Stories Listened',
+              value: _totalStoriesListened.toString(),
+              icon: Icons.book,
+              color: AppTheme.primaryColor,
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildStatCard(
-                title: 'Listening Time',
-                value: '${_totalListeningTime ~/ 60}h ${_totalListeningTime % 60}m',
-                icon: Icons.timer,
-                color: AppTheme.accentColor,
-              ),
+            _buildStatCard(
+              title: 'Listening Time',
+              value:
+                  '${_totalListeningTime ~/ 60}h ${_totalListeningTime % 60}m',
+              icon: Icons.timer,
+              color: AppTheme.accentColor,
+            ),
+            _buildStatCard(
+              title: 'Favorite Category',
+              value: _mostPopularCategory,
+              icon: Icons.favorite,
+              color: Colors.pink,
+            ),
+            _buildStatCard(
+              title: 'Active Children',
+              value: _activeChildren.toString(),
+              icon: Icons.child_care,
+              color: Colors.blue,
             ),
           ],
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _buildStatCard(
-                title: 'Favorite Category',
-                value: _mostPopularCategory,
-                icon: Icons.favorite,
-                color: Colors.pink,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildStatCard(
-                title: 'Active Children',
-                value: '2',
-                icon: Icons.child_care,
-                color: Colors.blue,
-              ),
-            ),
-          ],
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -299,49 +348,49 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            color.withValues(alpha: 0.1),
-            color.withValues(alpha: 0.05),
-          ],
+          colors: [color.withValues(alpha: 0.2), color.withValues(alpha: 0.1)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: color.withValues(alpha: 0.3),
-          width: 1,
-        ),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: color.withValues(alpha: 0.1),
-            blurRadius: 8,
+            color: color.withValues(alpha: 0.2),
+            blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(Responsive.isDesktop(context) ? 10 : 8),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.2),
+                  color: color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   icon,
                   color: color,
-                  size: 20,
+                  size: Responsive.isDesktop(context) ? 22 : 20,
                 ),
               ),
               const Spacer(),
               Flexible(
                 child: Text(
                   value,
-                  style: const TextStyle(
-                    fontSize: 22,
+                  style: TextStyle(
+                    fontSize: Responsive.responsiveFontSize(
+                      context,
+                      20,
+                      22,
+                      24,
+                    ),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -351,11 +400,11 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: Responsive.spacingMedium(context)),
           Text(
             title,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: Responsive.responsiveFontSize(context, 12, 13, 14),
               color: Colors.white.withValues(alpha: 0.8),
               fontWeight: FontWeight.w500,
             ),
@@ -369,112 +418,114 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
 
   Widget _buildSubscriptionStatus() {
     final isPremium = _subscriptionService.isPremiumActive;
-    
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: isPremium 
-              ? [AppTheme.accentColor.withValues(alpha: 0.1), AppTheme.accentColor.withValues(alpha: 0.05)]
-              : [Colors.white.withValues(alpha: 0.1), Colors.white.withValues(alpha: 0.05)],
+          colors: isPremium
+              ? [
+                  AppTheme.accentColor.withValues(alpha: 0.2),
+                  AppTheme.accentColor.withValues(alpha: 0.1),
+                ]
+              : [
+                  Colors.white.withValues(alpha: 0.15),
+                  Colors.white.withValues(alpha: 0.08),
+                ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isPremium 
-              ? AppTheme.accentColor.withValues(alpha: 0.3)
-              : Colors.white.withValues(alpha: 0.2),
-          width: 1,
+          color: isPremium
+              ? AppTheme.accentColor.withValues(alpha: 0.4)
+              : Colors.white.withValues(alpha: 0.25),
+          width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: isPremium 
-                ? AppTheme.accentColor.withValues(alpha: 0.1)
+            color: isPremium
+                ? AppTheme.accentColor.withValues(alpha: 0.2)
                 : Colors.black.withValues(alpha: 0.1),
-            blurRadius: 8,
+            blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: isPremium 
-                      ? AppTheme.accentColor.withValues(alpha: 0.2)
-                      : Colors.white.withValues(alpha: 0.1),
+          Container(
+            padding: EdgeInsets.all(Responsive.isDesktop(context) ? 12 : 10),
+            decoration: BoxDecoration(
+              color: isPremium
+                  ? AppTheme.accentColor.withValues(alpha: 0.15)
+                  : Colors.white.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              isPremium ? Icons.star : Icons.star_border,
+              color: isPremium ? AppTheme.accentColor : Colors.white70,
+              size: Responsive.isDesktop(context) ? 26 : 24,
+            ),
+          ),
+          SizedBox(width: Responsive.spacingMedium(context)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isPremium ? 'Premium Active' : 'Free Plan',
+                  style: TextStyle(
+                    fontSize: Responsive.responsiveFontSize(
+                      context,
+                      18,
+                      20,
+                      22,
+                    ),
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                SizedBox(height: Responsive.spacingSmall(context) / 2),
+                Text(
+                  isPremium
+                      ? 'You have access to all premium features'
+                      : 'Upgrade to unlock unlimited stories and voice cloning',
+                  style: TextStyle(
+                    fontSize: Responsive.responsiveFontSize(
+                      context,
+                      12,
+                      13,
+                      14,
+                    ),
+                    color: Colors.white.withValues(alpha: 0.8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!isPremium)
+            ElevatedButton(
+              onPressed: () => context.go('/subscription'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.accentColor,
+                foregroundColor: Colors.black87,
+                padding: EdgeInsets.symmetric(
+                  horizontal: Responsive.isDesktop(context) ? 24 : 20,
+                  vertical: Responsive.isDesktop(context) ? 14 : 12,
+                ),
+                shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  isPremium ? Icons.star : Icons.star_border,
-                  color: isPremium ? AppTheme.accentColor : Colors.white70,
-                  size: 24,
+              ),
+              child: Text(
+                'UPGRADE',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: Responsive.responsiveFontSize(context, 11, 12, 13),
                 ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isPremium ? 'Premium Active' : 'Free Plan',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      isPremium 
-                          ? 'You have access to all premium features'
-                          : 'Upgrade to unlock unlimited stories and voice cloning',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white.withValues(alpha: 0.8),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (!isPremium)
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppTheme.accentColor, Colors.orange],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: ElevatedButton(
-                    onPressed: () => context.go('/subscription'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'UPGRADE',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+            ),
         ],
       ),
     );
@@ -485,17 +536,24 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Colors.white.withValues(alpha: 0.1),
-            Colors.white.withValues(alpha: 0.05),
+            Colors.white.withValues(alpha: 0.15),
+            Colors.white.withValues(alpha: 0.08),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.2),
-          width: 1,
+          color: Colors.white.withValues(alpha: 0.25),
+          width: 1.5,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -505,22 +563,29 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: EdgeInsets.all(
+                    Responsive.isDesktop(context) ? 10 : 8,
+                  ),
                   decoration: BoxDecoration(
-                    color: AppTheme.accentColor.withValues(alpha: 0.2),
+                    color: AppTheme.accentColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.history,
                     color: AppTheme.accentColor,
-                    size: 20,
+                    size: Responsive.isDesktop(context) ? 22 : 20,
                   ),
                 ),
-                const SizedBox(width: 12),
-                const Text(
+                SizedBox(width: Responsive.spacingMedium(context)),
+                Text(
                   'Recent Activity',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: Responsive.responsiveFontSize(
+                      context,
+                      16,
+                      18,
+                      20,
+                    ),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -528,49 +593,117 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
               ],
             ),
           ),
-          ..._recentActivity.map((activity) => _buildActivityItem(activity)),
+          if (_recentActivity.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(40),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.history,
+                    size: 64,
+                    color: Colors.white.withValues(alpha: 0.5),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No recent activity',
+                    style: TextStyle(
+                      fontSize: Responsive.responsiveFontSize(
+                        context,
+                        18,
+                        20,
+                        22,
+                      ),
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white.withValues(alpha: 0.9),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Stories you listen to will appear here',
+                    style: TextStyle(
+                      fontSize: Responsive.responsiveFontSize(
+                        context,
+                        14,
+                        15,
+                        16,
+                      ),
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            )
+          else
+            ..._recentActivity.map((activity) => _buildActivityItem(activity)),
         ],
       ),
     );
   }
 
-  Widget _buildActivityItem(Map<String, dynamic> activity) {
-    final timestamp = activity['timestamp'] as DateTime;
-    final completed = activity['completed'] as bool;
-    
+  Widget _buildActivityItem(RecentActivity activity) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      margin: EdgeInsets.symmetric(
+        horizontal: Responsive.spacingMedium(context),
+        vertical: Responsive.spacingSmall(context) / 2,
+      ),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.1),
+            Colors.white.withValues(alpha: 0.05),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
+          color: Colors.white.withValues(alpha: 0.2),
           width: 1,
         ),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: Responsive.spacingMedium(context),
+          vertical: Responsive.spacingSmall(context),
+        ),
         leading: Container(
-          width: 40,
-          height: 40,
+          width: Responsive.isDesktop(context) ? 48 : 40,
+          height: Responsive.isDesktop(context) ? 48 : 40,
           decoration: BoxDecoration(
-            color: completed ? AppTheme.successColor.withValues(alpha: 0.2) : AppTheme.primaryColor.withValues(alpha: 0.2),
+            gradient: LinearGradient(
+              colors: activity.completed
+                  ? [
+                      AppTheme.successColor.withValues(alpha: 0.3),
+                      AppTheme.successColor.withValues(alpha: 0.2),
+                    ]
+                  : [
+                      AppTheme.primaryColor.withValues(alpha: 0.3),
+                      AppTheme.primaryColor.withValues(alpha: 0.2),
+                    ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: completed ? AppTheme.successColor : AppTheme.primaryColor,
+              color: activity.completed
+                  ? AppTheme.successColor
+                  : AppTheme.primaryColor,
               width: 2,
             ),
           ),
           child: Icon(
-            completed ? Icons.check : Icons.play_arrow,
-            color: completed ? AppTheme.successColor : AppTheme.primaryColor,
-            size: 20,
+            activity.completed ? Icons.check : Icons.play_arrow,
+            color: activity.completed
+                ? AppTheme.successColor
+                : AppTheme.primaryColor,
+            size: Responsive.isDesktop(context) ? 24 : 20,
           ),
         ),
         title: Text(
-          activity['story'],
-          style: const TextStyle(
-            fontSize: 16,
+          activity.storyTitle,
+          style: TextStyle(
+            fontSize: Responsive.responsiveFontSize(context, 15, 16, 17),
             fontWeight: FontWeight.w600,
             color: Colors.white,
           ),
@@ -580,43 +713,62 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 4),
+            SizedBox(height: Responsive.spacingSmall(context) / 2),
             Text(
-              '${activity['child']} • ${activity['duration']} min',
+              '${activity.childName} • ${activity.durationMinutes} min',
               style: TextStyle(
-                fontSize: 13,
+                fontSize: Responsive.responsiveFontSize(context, 12, 13, 14),
                 color: Colors.white.withValues(alpha: 0.8),
                 fontWeight: FontWeight.w500,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 2),
+            SizedBox(height: Responsive.spacingSmall(context) / 2),
             Text(
-              _formatTimestamp(timestamp),
+              activity.timeAgo,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: Responsive.responsiveFontSize(context, 11, 12, 13),
                 color: Colors.white.withValues(alpha: 0.6),
               ),
             ),
           ],
         ),
         trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: EdgeInsets.symmetric(
+            horizontal: Responsive.spacingSmall(context),
+            vertical: Responsive.spacingSmall(context) / 2,
+          ),
           decoration: BoxDecoration(
-            color: completed ? AppTheme.successColor.withValues(alpha: 0.2) : AppTheme.primaryColor.withValues(alpha: 0.2),
+            gradient: LinearGradient(
+              colors: activity.completed
+                  ? [
+                      AppTheme.successColor.withValues(alpha: 0.3),
+                      AppTheme.successColor.withValues(alpha: 0.2),
+                    ]
+                  : [
+                      AppTheme.primaryColor.withValues(alpha: 0.3),
+                      AppTheme.primaryColor.withValues(alpha: 0.2),
+                    ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: completed ? AppTheme.successColor : AppTheme.primaryColor,
+              color: activity.completed
+                  ? AppTheme.successColor
+                  : AppTheme.primaryColor,
               width: 1,
             ),
           ),
           child: Text(
-            completed ? 'Completed' : 'In Progress',
+            activity.completed ? 'Completed' : 'In Progress',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: Responsive.responsiveFontSize(context, 10, 11, 12),
               fontWeight: FontWeight.w600,
-              color: completed ? AppTheme.successColor : AppTheme.primaryColor,
+              color: activity.completed
+                  ? AppTheme.successColor
+                  : AppTheme.primaryColor,
             ),
           ),
         ),
@@ -627,26 +779,49 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
   Widget _buildVoiceManagement() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.15),
+            Colors.white.withValues(alpha: 0.08),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.25),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.record_voice_over,
                   color: AppTheme.accentColor,
-                  size: 24,
+                  size: Responsive.isDesktop(context) ? 26 : 24,
                 ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Your Voices',
+                SizedBox(width: Responsive.spacingMedium(context)),
+                Text(
+                  'My Voices',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: Responsive.responsiveFontSize(
+                      context,
+                      16,
+                      18,
+                      20,
+                    ),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -655,15 +830,19 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
                 IconButton(
                   onPressed: _loadUserVoices,
                   icon: _isLoadingVoices
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
+                      ? SizedBox(
+                          width: Responsive.isDesktop(context) ? 18 : 16,
+                          height: Responsive.isDesktop(context) ? 18 : 16,
+                          child: const CircularProgressIndicator(
                             color: Colors.white70,
                             strokeWidth: 2,
                           ),
                         )
-                      : const Icon(Icons.refresh, color: Colors.white70),
+                      : Icon(
+                          Icons.refresh,
+                          color: Colors.white70,
+                          size: Responsive.isDesktop(context) ? 24 : 20,
+                        ),
                   tooltip: 'Refresh Voices',
                 ),
               ],
@@ -671,7 +850,7 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
           ),
           ..._userVoices.map((voice) => _buildVoiceTile(voice)),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.all(20),
             child: Column(
               children: [
                 SizedBox(
@@ -683,10 +862,13 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.accentColor,
                       side: const BorderSide(color: AppTheme.accentColor),
+                      padding: EdgeInsets.symmetric(
+                        vertical: Responsive.isDesktop(context) ? 16 : 14,
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: Responsive.spacingSmall(context)),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
@@ -696,6 +878,9 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.orange,
                       side: const BorderSide(color: Colors.orange),
+                      padding: EdgeInsets.symmetric(
+                        vertical: Responsive.isDesktop(context) ? 16 : 14,
+                      ),
                     ),
                   ),
                 ),
@@ -709,14 +894,8 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
 
   Widget _buildVoiceTile(UserVoice voice) {
     return ListTile(
-      leading: const Icon(
-        Icons.record_voice_over,
-        color: Colors.white70,
-      ),
-      title: Text(
-        voice.voiceName,
-        style: const TextStyle(color: Colors.white),
-      ),
+      leading: const Icon(Icons.record_voice_over, color: Colors.white70),
+      title: Text(voice.voiceName, style: const TextStyle(color: Colors.white)),
       subtitle: voice.voiceDescription != null
           ? Text(
               voice.voiceDescription!,
@@ -768,7 +947,9 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
 
   Future<void> _renameVoice(UserVoice voice, String userId) async {
     final nameController = TextEditingController(text: voice.voiceName);
-    final descriptionController = TextEditingController(text: voice.voiceDescription ?? '');
+    final descriptionController = TextEditingController(
+      text: voice.voiceDescription ?? '',
+    );
 
     final result = await showDialog<bool>(
       context: context,
@@ -819,10 +1000,12 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
           userId,
           voice.voiceId,
           nameController.text.trim(),
-          voiceDescription: descriptionController.text.trim().isNotEmpty ? descriptionController.text.trim() : null,
+          voiceDescription: descriptionController.text.trim().isNotEmpty
+              ? descriptionController.text.trim()
+              : null,
         );
         await _loadUserVoices();
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -849,7 +1032,9 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Voice'),
-        content: Text('Are you sure you want to delete "${voice.voiceName}"? This action cannot be undone.'),
+        content: Text(
+          'Are you sure you want to delete "${voice.voiceName}"? This action cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -857,9 +1042,7 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Delete'),
           ),
         ],
@@ -870,7 +1053,7 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
       try {
         await _voiceCloningService.deleteVoice(userId, voice.voiceId);
         await _loadUserVoices();
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -895,26 +1078,49 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
   Widget _buildQuickActions() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.15),
+            Colors.white.withValues(alpha: 0.08),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.25),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.all(16),
+          Padding(
+            padding: const EdgeInsets.all(20),
             child: Row(
               children: [
                 Icon(
                   Icons.flash_on,
                   color: AppTheme.accentColor,
-                  size: 24,
+                  size: Responsive.isDesktop(context) ? 26 : 24,
                 ),
-                SizedBox(width: 12),
+                SizedBox(width: Responsive.spacingMedium(context)),
                 Text(
                   'Quick Actions',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: Responsive.responsiveFontSize(
+                      context,
+                      16,
+                      18,
+                      20,
+                    ),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -991,7 +1197,10 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
     bool isDestructive = false,
   }) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      margin: EdgeInsets.symmetric(
+        horizontal: Responsive.spacingMedium(context),
+        vertical: Responsive.spacingSmall(context) / 2,
+      ),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
@@ -1001,11 +1210,14 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
         ),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: Responsive.spacingMedium(context),
+          vertical: Responsive.spacingSmall(context),
+        ),
         leading: Container(
-          padding: const EdgeInsets.all(8),
+          padding: EdgeInsets.all(Responsive.isDesktop(context) ? 10 : 8),
           decoration: BoxDecoration(
-            color: isDestructive 
+            color: isDestructive
                 ? Colors.red.withValues(alpha: 0.1)
                 : Colors.white.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
@@ -1013,13 +1225,13 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
           child: Icon(
             icon,
             color: isDestructive ? Colors.red : Colors.white70,
-            size: 20,
+            size: Responsive.isDesktop(context) ? 22 : 20,
           ),
         ),
         title: Text(
           title,
           style: TextStyle(
-            fontSize: 16,
+            fontSize: Responsive.responsiveFontSize(context, 15, 16, 17),
             fontWeight: FontWeight.w600,
             color: isDestructive ? Colors.red : Colors.white,
           ),
@@ -1027,12 +1239,12 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
         subtitle: Text(
           subtitle,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: Responsive.responsiveFontSize(context, 12, 13, 14),
             color: Colors.white.withValues(alpha: 0.7),
           ),
         ),
         trailing: Container(
-          padding: const EdgeInsets.all(4),
+          padding: EdgeInsets.all(Responsive.isDesktop(context) ? 6 : 4),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(6),
@@ -1040,13 +1252,10 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
           child: Icon(
             Icons.arrow_forward_ios,
             color: Colors.white.withValues(alpha: 0.6),
-            size: 14,
+            size: Responsive.isDesktop(context) ? 16 : 14,
           ),
         ),
-        onTap: () {
-          // Add haptic feedback
-          onTap();
-        },
+        onTap: onTap,
       ),
     );
   }
@@ -1086,20 +1295,5 @@ class _ParentalDashboardPageState extends State<ParentalDashboardPage> {
         ],
       ),
     );
-  }
-
-  String _formatTimestamp(DateTime timestamp) {
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
-    
-    if (difference.inDays > 0) {
-      return '${difference.inDays} day${difference.inDays > 1 ? 's' : ''} ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours} hour${difference.inHours > 1 ? 's' : ''} ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes} minute${difference.inMinutes > 1 ? 's' : ''} ago';
-    } else {
-      return 'Just now';
-    }
   }
 }

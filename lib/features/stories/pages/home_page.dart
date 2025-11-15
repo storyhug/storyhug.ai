@@ -15,21 +15,24 @@ import '../providers/story_provider.dart';
 import '../providers/favorites_provider.dart';
 import '../widgets/animated_favorite_button.dart';
 import '../../../shared/widgets/storyhug_background.dart';
+import '../../../shared/responsive.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   final ChildProfile? childProfile;
-  
+
   const HomePage({super.key, this.childProfile});
 
   @override
   ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMixin {
+class _HomePageState extends ConsumerState<HomePage>
+    with TickerProviderStateMixin {
   String _userName = 'there';
   bool _isPremium = false;
   bool _isCheckingPremium = true;
-  final StripeSubscriptionService _subscriptionService = StripeSubscriptionService();
+  final StripeSubscriptionService _subscriptionService =
+      StripeSubscriptionService();
   late AnimationController _listAnimationController;
 
   @override
@@ -102,7 +105,7 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     final storyState = ref.watch(storyProvider);
-    
+
     return PopScope(
       canPop: false,
       onPopInvoked: (didPop) {
@@ -121,7 +124,12 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
           actions: const <Widget>[],
           flexibleSpace: SafeArea(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              padding: EdgeInsets.fromLTRB(
+                Responsive.responsiveHorizontalPadding(context).horizontal / 2,
+                10,
+                Responsive.responsiveHorizontalPadding(context).horizontal / 2,
+                10,
+              ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(18),
                 child: BackdropFilter(
@@ -139,7 +147,10 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
                         ),
                       ],
                     ),
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 18),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 18,
+                    ),
                     child: Row(
                       children: [
                         Container(
@@ -160,7 +171,12 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
                             child: Image.asset(
                               'assets/branding/storyhug_logo.png',
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => const Icon(Icons.auto_stories, color: AppTheme.accentColor, size: 28),
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Icon(
+                                    Icons.auto_stories,
+                                    color: AppTheme.accentColor,
+                                    size: 28,
+                                  ),
                             ),
                           ),
                         ),
@@ -169,7 +185,8 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
                           child: TweenAnimationBuilder<double>(
                             duration: const Duration(milliseconds: 800),
                             tween: Tween(begin: 0, end: 1),
-                            builder: (context, value, child) => Opacity(opacity: value, child: child),
+                            builder: (context, value, child) =>
+                                Opacity(opacity: value, child: child),
                             child: RichText(
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -209,14 +226,18 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
                           iconSize: 26,
                           splashRadius: 22,
                           icon: const Icon(Icons.refresh, color: Colors.white),
-                          onPressed: () => ref.read(storyProvider.notifier).refresh(),
+                          onPressed: () =>
+                              ref.read(storyProvider.notifier).refresh(),
                           tooltip: 'Refresh Stories',
                         ),
                         const SizedBox(width: 2),
                         IconButton(
                           iconSize: 26,
                           splashRadius: 22,
-                          icon: const Icon(Icons.dashboard, color: Colors.white),
+                          icon: const Icon(
+                            Icons.dashboard,
+                            color: Colors.white,
+                          ),
                           onPressed: () => context.go('/parental-dashboard'),
                           tooltip: 'Dashboard',
                         ),
@@ -232,29 +253,43 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
           showStars: true,
           animateStars: true,
           child: SafeArea(
-            child: storyState.isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      color: AppTheme.accentColor,
-                    ),
-                  )
-                : RefreshIndicator(
-                    onRefresh: () => ref.read(storyProvider.notifier).refresh(),
-                    color: AppTheme.accentColor,
-                    child: SingleChildScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 8),
-                          _buildCategories(storyState),
-                          const SizedBox(height: 24),
-                          _buildFeaturedStories(storyState),
-                        ],
-                      ),
-                    ),
-                  ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return storyState.isLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: AppTheme.accentColor,
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: () =>
+                            ref.read(storyProvider.notifier).refresh(),
+                        color: AppTheme.accentColor,
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: Responsive.responsivePadding(context),
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: Responsive.maxContentWidth(context),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  height: Responsive.spacingSmall(context),
+                                ),
+                                _buildCategories(storyState, constraints),
+                                SizedBox(
+                                  height: Responsive.spacingLarge(context),
+                                ),
+                                _buildFeaturedStories(storyState, constraints),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+              },
+            ),
           ),
         ),
       ),
@@ -284,7 +319,6 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
       ),
     );
   }
-
 
   Widget _buildWelcomeBanner() {
     return Container(
@@ -360,7 +394,7 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
     );
   }
 
-  Widget _buildCategories(StoryState storyState) {
+  Widget _buildCategories(StoryState storyState, BoxConstraints constraints) {
     final categoryColors = [
       [Colors.pink.shade400, Colors.purple.shade600],
       [Colors.blue.shade400, Colors.cyan.shade600],
@@ -385,7 +419,7 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
               child: Text(
                 'Story Categories',
                 style: GoogleFonts.poppins(
-                  fontSize: 20,
+                  fontSize: Responsive.responsiveFontSize(context, 20, 24, 28),
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                 ),
@@ -402,18 +436,34 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 140,
+          height: Responsive.isDesktop(context)
+              ? 180
+              : Responsive.isTablet(context)
+              ? 160
+              : 140,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: storyState.categories.length,
+            padding: EdgeInsets.symmetric(
+              horizontal: Responsive.isDesktop(context) ? 8 : 0,
+            ),
             itemBuilder: (context, index) {
               final category = storyState.categories[index];
-              final storyCount = storyState.categorizedStories[category]?.length ?? 0;
+              final storyCount =
+                  storyState.categorizedStories[category]?.length ?? 0;
               final colors = categoryColors[index % categoryColors.length];
-              
+
+              final cardWidth = Responsive.isDesktop(context)
+                  ? 160.0
+                  : Responsive.isTablet(context)
+                  ? 145.0
+                  : 130.0;
+
               return Container(
-                width: 130,
-                margin: const EdgeInsets.only(right: 12),
+                width: cardWidth,
+                margin: EdgeInsets.only(
+                  right: Responsive.spacingMedium(context),
+                ),
                 child: InkWell(
                   onTap: () {
                     context.go('/search', extra: {'category': category});
@@ -445,59 +495,63 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
                           ),
                         ),
                         Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.3),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            _getCategoryIcon(category),
-                            size: 32,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: Column(
-                            children: [
-                              Text(
-                                category,
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.3),
+                                shape: BoxShape.circle,
                               ),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.3),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  '$storyCount ${storyCount == 1 ? 'story' : 'stories'}',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w500,
+                              child: Icon(
+                                _getCategoryIcon(category),
+                                size: 32,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              child: Column(
+                                children: [
+                                  Text(
+                                    category,
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                ),
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.3,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      '$storyCount ${storyCount == 1 ? 'story' : 'stories'}',
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
-                      ],
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -511,7 +565,10 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
     );
   }
 
-  Widget _buildFeaturedStories(StoryState storyState) {
+  Widget _buildFeaturedStories(
+    StoryState storyState,
+    BoxConstraints constraints,
+  ) {
     final storyColors = [
       [Colors.indigo.shade400, Colors.purple.shade600],
       [Colors.pink.shade400, Colors.red.shade600],
@@ -531,7 +588,7 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
               child: Text(
                 'Featured Stories',
                 style: GoogleFonts.poppins(
-                  fontSize: 20,
+                  fontSize: Responsive.responsiveFontSize(context, 20, 24, 28),
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                 ),
@@ -568,210 +625,435 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
                       ),
                       const SizedBox(height: 8),
                       TextButton(
-                        onPressed: () => ref.read(storyProvider.notifier).refresh(),
+                        onPressed: () =>
+                            ref.read(storyProvider.notifier).refresh(),
                         child: const Text('Retry'),
                       ),
                     ],
                   ),
                 ),
               )
-            : ListView.builder(
+            : Responsive.isMobile(context)
+            ? ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: storyState.featuredStories.length,
                 itemBuilder: (context, index) {
-                  final story = storyState.featuredStories[index];
-                  final colors = storyColors[index % storyColors.length];
-                  
-                  // Create staggered animation for each item
-                  final animation = Tween<double>(
-                    begin: 0.0,
-                    end: 1.0,
-                  ).animate(CurvedAnimation(
-                    parent: _listAnimationController,
-                    curve: Interval(
-                      (index * 0.1).clamp(0.0, 0.9),
-                      ((index * 0.1) + 0.3).clamp(0.0, 1.0),
-                      curve: Curves.easeOut,
-                    ),
-                  ));
-                  
-                  return FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0, 0.3),
-                        end: Offset.zero,
-                      ).animate(animation),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        child: InkWell(
-                          onTap: () => context.go('/player', extra: story),
-                          borderRadius: BorderRadius.circular(24),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  colors[0].withValues(alpha: 0.4),
-                                  colors[1].withValues(alpha: 0.3),
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.3),
-                                width: 1.5,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: colors[1].withValues(alpha: 0.3),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                // Story thumbnail
-                                Container(
-                                  width: 70,
-                                  height: 70,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: colors,
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: colors[1].withValues(alpha: 0.4),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: story.thumbnailUrl != null
-                                      ? ClipRRect(
-                                          borderRadius: BorderRadius.circular(12),
-                                          child: Image.network(
-                                            story.thumbnailUrl!,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) => const Icon(
-                                              Icons.auto_stories,
-                                              color: Colors.white,
-                                              size: 32,
-                                            ),
-                                          ),
-                                        )
-                                      : const Icon(
-                                          Icons.auto_stories,
-                                          color: Colors.white,
-                                          size: 32,
-                                        ),
-                                ),
-                                const SizedBox(width: 16),
-                                // Story info
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        story.title,
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white,
-                                        ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.white.withValues(alpha: 0.2),
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const Icon(
-                                                  Icons.access_time,
-                                                  size: 12,
-                                                  color: Colors.white,
-                                                ),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  '${story.durationMinutes} min',
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              story.category,
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.white.withValues(alpha: 0.8),
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                // Favorite button
-                                AnimatedFavoriteButton(
-                                  storyId: story.id,
-                                  storyTitle: story.title,
-                                ),
-                                // Play button
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.2),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Icon(
-                                    Icons.play_arrow_rounded,
-                                    color: colors[1],
-                                    size: 24,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                  return _buildStoryCard(
+                    context,
+                    storyState.featuredStories[index],
+                    index,
+                    storyColors,
+                  );
+                },
+              )
+            : GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: Responsive.gridCrossAxisCount(
+                    context,
+                    mobile: 1,
+                    tablet: 2,
+                    desktop: 3,
+                  ),
+                  childAspectRatio: Responsive.gridChildAspectRatio(context),
+                  crossAxisSpacing: Responsive.spacingMedium(context),
+                  mainAxisSpacing: Responsive.spacingMedium(context),
+                ),
+                itemCount: storyState.featuredStories.length,
+                itemBuilder: (context, index) {
+                  return _buildStoryCard(
+                    context,
+                    storyState.featuredStories[index],
+                    index,
+                    storyColors,
                   );
                 },
               ),
       ],
+    );
+  }
+
+  Widget _buildStoryCard(
+    BuildContext context,
+    Story story,
+    int index,
+    List<List<Color>> storyColors,
+  ) {
+    final colors = storyColors[index % storyColors.length];
+
+    // Create staggered animation for each item
+    final animation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _listAnimationController,
+        curve: Interval(
+          (index * 0.1).clamp(0.0, 0.9),
+          ((index * 0.1) + 0.3).clamp(0.0, 1.0),
+          curve: Curves.easeOut,
+        ),
+      ),
+    );
+
+    final isGridLayout = !Responsive.isMobile(context);
+
+    return FadeTransition(
+      opacity: animation,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.3),
+          end: Offset.zero,
+        ).animate(animation),
+        child: Container(
+          margin: EdgeInsets.only(
+            bottom: Responsive.isMobile(context)
+                ? Responsive.spacingMedium(context)
+                : 0,
+          ),
+          child: InkWell(
+            onTap: () => context.go('/player', extra: story),
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              padding: EdgeInsets.all(Responsive.spacingMedium(context)),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    colors[0].withValues(alpha: 0.4),
+                    colors[1].withValues(alpha: 0.3),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.3),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: colors[1].withValues(alpha: 0.3),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: isGridLayout
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Story thumbnail (larger in grid)
+                        Expanded(
+                          flex: 3,
+                          child: Container(
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: colors,
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: colors[1].withValues(alpha: 0.4),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: story.thumbnailUrl != null
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Image.network(
+                                      story.thumbnailUrl!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(
+                                        Icons.auto_stories,
+                                        color: Colors.white,
+                                        size: 48,
+                                      ),
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.auto_stories,
+                                    color: Colors.white,
+                                    size: 48,
+                                  ),
+                          ),
+                        ),
+                        SizedBox(height: Responsive.spacingSmall(context)),
+                        // Story info
+                        Expanded(
+                          flex: 2,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                story.title,
+                                style: GoogleFonts.poppins(
+                                  fontSize: Responsive.responsiveFontSize(
+                                    context,
+                                    16,
+                                    18,
+                                    20,
+                                  ),
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              SizedBox(
+                                height: Responsive.spacingSmall(context),
+                              ),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: Responsive.spacingSmall(
+                                        context,
+                                      ),
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.2,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.access_time,
+                                          size: Responsive.isDesktop(context)
+                                              ? 14
+                                              : 12,
+                                          color: Colors.white,
+                                        ),
+                                        SizedBox(
+                                          width:
+                                              Responsive.spacingSmall(context) /
+                                              2,
+                                        ),
+                                        Text(
+                                          '${story.durationMinutes} min',
+                                          style: TextStyle(
+                                            fontSize:
+                                                Responsive.responsiveFontSize(
+                                                  context,
+                                                  11,
+                                                  12,
+                                                  13,
+                                                ),
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: Responsive.spacingSmall(context),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      story.category,
+                                      style: TextStyle(
+                                        fontSize: Responsive.responsiveFontSize(
+                                          context,
+                                          12,
+                                          13,
+                                          14,
+                                        ),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.8,
+                                        ),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        // Story thumbnail
+                        Container(
+                          width: Responsive.isDesktop(context) ? 90 : 70,
+                          height: Responsive.isDesktop(context) ? 90 : 70,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: colors,
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: colors[1].withValues(alpha: 0.4),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: story.thumbnailUrl != null
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.network(
+                                    story.thumbnailUrl!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Icon(
+                                      Icons.auto_stories,
+                                      color: Colors.white,
+                                      size: Responsive.isDesktop(context)
+                                          ? 40
+                                          : 32,
+                                    ),
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.auto_stories,
+                                  color: Colors.white,
+                                  size: Responsive.isDesktop(context) ? 40 : 32,
+                                ),
+                        ),
+                        SizedBox(width: Responsive.spacingMedium(context)),
+                        // Story info
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                story.title,
+                                style: GoogleFonts.poppins(
+                                  fontSize: Responsive.responsiveFontSize(
+                                    context,
+                                    16,
+                                    18,
+                                    20,
+                                  ),
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              SizedBox(
+                                height: Responsive.spacingSmall(context),
+                              ),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: Responsive.spacingSmall(
+                                        context,
+                                      ),
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.2,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.access_time,
+                                          size: Responsive.isDesktop(context)
+                                              ? 14
+                                              : 12,
+                                          color: Colors.white,
+                                        ),
+                                        SizedBox(
+                                          width:
+                                              Responsive.spacingSmall(context) /
+                                              2,
+                                        ),
+                                        Text(
+                                          '${story.durationMinutes} min',
+                                          style: TextStyle(
+                                            fontSize:
+                                                Responsive.responsiveFontSize(
+                                                  context,
+                                                  11,
+                                                  12,
+                                                  13,
+                                                ),
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: Responsive.spacingSmall(context),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      story.category,
+                                      style: TextStyle(
+                                        fontSize: Responsive.responsiveFontSize(
+                                          context,
+                                          12,
+                                          13,
+                                          14,
+                                        ),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.8,
+                                        ),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Favorite button
+                        AnimatedFavoriteButton(
+                          storyId: story.id,
+                          storyTitle: story.title,
+                        ),
+                        SizedBox(width: Responsive.spacingSmall(context)),
+                        // Play button
+                        Container(
+                          padding: EdgeInsets.all(
+                            Responsive.isDesktop(context) ? 14 : 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.2),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            Icons.play_arrow_rounded,
+                            color: colors[1],
+                            size: Responsive.isDesktop(context) ? 28 : 24,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -796,10 +1078,7 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
         icon: const SizedBox(
           width: 20,
           height: 20,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: Colors.white,
-          ),
+          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
         ),
         onPressed: null,
         tooltip: 'Checking Premium Status...',
@@ -882,7 +1161,10 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
               if (!_isPremium) ...[
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.orange,
                     borderRadius: BorderRadius.circular(8),
@@ -913,7 +1195,10 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
               if (!_isPremium) ...[
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.orange,
                     borderRadius: BorderRadius.circular(8),
@@ -957,7 +1242,9 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
             const Text('Premium Required'),
           ],
         ),
-        content: Text('$feature is a premium feature. Upgrade to access this functionality.'),
+        content: Text(
+          '$feature is a premium feature. Upgrade to access this functionality.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -977,7 +1264,7 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
 
   void _showPremiumFeaturesDialog() {
     final premiumFeatures = _subscriptionService.getPremiumFeatures();
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -995,26 +1282,28 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                _isPremium 
+                _isPremium
                     ? 'You have access to all premium features!'
                     : 'Upgrade to unlock these premium features:',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
-              ...premiumFeatures.map((feature) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    Icon(
-                      _isPremium ? Icons.check_circle : Icons.lock,
-                      color: _isPremium ? Colors.green : Colors.grey,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(feature)),
-                  ],
+              ...premiumFeatures.map(
+                (feature) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _isPremium ? Icons.check_circle : Icons.lock,
+                        color: _isPremium ? Colors.green : Colors.grey,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(feature)),
+                    ],
+                  ),
                 ),
-              )),
+              ),
             ],
           ),
         ),
@@ -1047,7 +1336,9 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
             Text('Offline Downloads'),
           ],
         ),
-        content: const Text('Download stories for offline listening. This feature is coming soon!'),
+        content: const Text(
+          'Download stories for offline listening. This feature is coming soon!',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -1058,4 +1349,3 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
     );
   }
 }
-
